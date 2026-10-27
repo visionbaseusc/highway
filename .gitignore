@@ -1,0 +1,4 @@
+# 只發布 index.html、data.js、logo_visionbase.png
+_*
+*.bak
+*.mp4

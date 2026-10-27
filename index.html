@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>套皮即時預覽</title>
+<style>
+:root { --bg: #15181a; --panel: #1f2326; --line: #33393d; --fg: #e8ecee; --muted: #9aa5ab; --accent: #f29a2e; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; height: 100vh; height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto;
+       grid-template-areas: "head" "panes" "bar" "board"; overflow: hidden; background: var(--bg); color: var(--fg); font: 13.5px/1.45 "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; }
+header { grid-area: head; display: flex; align-items: center; gap: 14px; padding: 6px 16px; min-width: 0; }
+header h1 { font-size: 17px; margin: 0; font-weight: 700; }
+header .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.brand { flex: none; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; line-height: 1.35; text-align: right; white-space: nowrap; }
+.brand img { height: 42px; display: block; }
+.panes { grid-area: panes; min-height: 0; container-type: size; display: flex; justify-content: center; align-items: center; gap: 10px; padding: 0 16px; }
+.pane { position: relative; flex: none; width: min(100cqw, calc(100cqh * 16 / 9)); aspect-ratio: 16 / 9; background: #000; overflow: hidden; border-radius: 4px; }
+.pane canvas { width: 100%; height: 100%; display: block; }
+#route { flex: 1; min-width: 120px; height: 30px; display: block; cursor: pointer; touch-action: none; }
+.tag { position: absolute; left: 10px; top: 8px; padding: 2px 8px; background: rgba(0,0,0,.55); border-radius: 3px; font-size: 12.5px; pointer-events: none; }
+.hud { position: absolute; left: 10px; bottom: 8px; padding: 3px 10px; background: rgba(0,0,0,.55); border-radius: 3px; font-size: 15px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.note { position: absolute; right: 10px; bottom: 8px; padding: 2px 8px; background: rgba(0,0,0,.55); border-radius: 3px; font-size: 11.5px; color: #cfd6da; pointer-events: none; }
+.viewhint { position: absolute; right: 10px; top: 8px; padding: 2px 8px; background: rgba(0,0,0,.55); border-radius: 3px; font-size: 11.5px; color: #cfd6da; pointer-events: none; }
+/* 警示：全寬紅色帶＋上下黃黑警示斜紋、粗黑體、硬切閃兩下，四周紅色暈邊（使用者：要真的有警語的感覺，會嚇一跳） */
+#nag { position: absolute; left: 0; right: 0; bottom: 17%; padding: .72em 0 .68em; text-align: center; background: rgba(222, 0, 0, .94); color: #fff;
+       font: 900 26px/1.15 "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; letter-spacing: .14em; white-space: nowrap;
+       text-shadow: 0 2px 0 rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
+#nag::before, #nag::after { content: ''; position: absolute; left: 0; right: 0; height: .34em; background: repeating-linear-gradient(-45deg, #ffd000 0 .55em, #111 .55em 1.1em); }
+#nag::before { top: 0; } #nag::after { bottom: 0; }
+#nag b { color: #ffd000; font-weight: 900; margin: 0 .5em; }
+#nag.show { animation: nagFlash 1.6s step-end forwards; }
+@keyframes nagFlash { 0% { opacity: 1; } 28% { opacity: 0; } 44% { opacity: 1; } 72% { opacity: 0; } 100% { opacity: 0; } }
+#drop { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(242,154,46,.25); border: 3px dashed var(--accent); font-size: 20px; text-align: center; }
+.bar { grid-area: bar; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 16px 0; }
+.grp { display: flex; align-items: center; gap: 6px; }
+.grp.grow { flex: 1 1 260px; min-width: 200px; }
+.grp label, .pset label { color: var(--muted); }
+.vsep { width: 1px; height: 22px; background: var(--line); }
+.chips { display: flex; gap: 6px; }
+.chip { font-size: 12px; color: var(--muted); background: #121517; border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; cursor: default; }
+.chip b { margin-left: 4px; font-weight: 700; }
+.chip b.ok { color: #9fd49a; } .chip b.warn { color: #ffb36b; }
+input[type=range] { flex: 1; min-width: 60px; accent-color: var(--accent); }
+input[type=number], select { background: #121517; color: var(--fg); border: 1px solid var(--line); border-radius: 3px; padding: 3px 6px; }
+input[type=number] { width: 64px; }
+input[type=color] { width: 28px; height: 22px; padding: 0; border: 1px solid var(--line); background: none; }
+button { background: #2c3236; color: var(--fg); border: 1px solid #454d52; border-radius: 3px; padding: 4px 10px; cursor: pointer; font: inherit; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #1a1a1a; font-weight: 700; }
+button:disabled { opacity: .45; cursor: default; }
+.val { font-variant-numeric: tabular-nums; min-width: 56px; }
+.status { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.pset { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pset[hidden] { display: none; }
+.faces { display: flex; align-items: center; gap: 4px 9px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.fpart { color: var(--fg); font-weight: 700; }
+.face { display: inline-flex; align-items: center; gap: 3px; }
+.face input[type=checkbox] { margin: 0; }
+.pp { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 12px; }
+.pp[hidden] { display: none; }
+.pp input[type=number], .pset input.n { width: 54px; }
+.vb { display: inline-flex; align-items: center; gap: 3px; }
+.vary-off .vb { display: none; }
+.warn { color: #ffb36b; } .ok { color: #9fd49a; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; padding: 4px 11px; }
+.seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; } .seg button:last-child { border-radius: 0 3px 3px 0; }
+.seg button.on { background: #4a5a66; border-color: #6d8494; color: #fff; }
+.board { grid-area: board; min-width: 0; height: clamp(290px, 44vh, 420px); display: flex; flex-direction: column; margin: 8px 16px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
+.tabs { display: flex; gap: 2px; padding: 6px 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; align-items: flex-end; }
+.tabs #bSize { margin-left: auto; padding: 0 2px 5px; }
+.tabs button { border-radius: 4px 4px 0 0; border-bottom: none; background: #24292c; }
+.tabs button.on { background: var(--accent); color: #1a1a1a; font-weight: 700; border-color: var(--accent); }
+.toolbar { display: flex; gap: 5px 8px; padding: 6px 10px; flex-wrap: wrap; align-items: center; }
+.toolbar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+.stage { flex: 1 1 auto; min-height: 60px; box-sizing: border-box; overflow: auto; padding: 8px 10px; background: repeating-conic-gradient(#2a2f32 0% 25%, #24282b 0% 50%) 50% / 16px 16px; position: relative; }
+#boardCv { display: block; cursor: default; touch-action: none; }
+.foot { display: flex; align-items: center; gap: 12px; padding: 4px 12px 6px; }
+.hint { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1250px) { header .sub { display: none; } }
+body.full { display: block; } body.full header, body.full .bar, body.full .board { display: none; }
+body.full .panes { display: block; padding: 0; container-type: normal; } body.full #simPane { width: 100vw; height: 56.25vw; aspect-ratio: auto; border-radius: 0; }
+</style>
+<script src="data.js"></script>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
+</head>
+<body>
+<header>
+  <h1>套皮即時預覽</h1>
+  <span class="sub">示意道路：進出隧道、新設鋼構橋、兩側欒樹三種路段反覆出現（不是現地線形，只看設計效果）｜請用 Chrome 或 Edge</span>
+</header>
+<div class="panes">
+  <div class="pane" id="simPane">
+    <div class="tag" id="viewTag">模擬（示意道路）</div>
+    <div class="viewhint" id="viewHint"></div>
+    <div class="hud" id="hud">—</div>
+    <div class="note" id="fps"></div>
+    <div id="nag"><b>⚠</b>專心駕駛！不要東張西望！<b>⚠</b></div>
+    <div id="drop">放開以載入<br><small>隔音牆.png、施工圍籬.png、方案設定.xlsx</small></div>
+  </div>
+</div>
+
+<div class="bar">
+  <div class="grp"><button class="primary" id="play" title="空白鍵">▶ 播放</button><input type="range" id="speed" min="40" max="110" step="1" value="100" style="flex:none;width:80px" title="車速（↑↓ 也可調整）"><span class="val" id="speedV">100 km/h</span></div>
+  <div class="grp grow"><label>位置</label><canvas id="route" title="點一下或拖曳跳到該處"></canvas><span class="val" id="posV"></span></div>
+  <div class="grp">
+    <select id="cam" title="視角"><option value="drive">駕駛視角</option><option value="orbit">自由視角</option><option value="elev">立面檢視</option></select>
+    <select id="view" title="駕駛視角的方向（← → 可暫時轉頭）"><option value="0">正前方</option><option value="30">右前方</option><option value="-30">左前方</option><option value="up">仰看高架</option></select>
+    <select id="side" title="立面檢視看哪一側" hidden><option value="1">右側（南下側）</option><option value="-1">左側（北上側）</option></select>
+    <select id="light" title="光線"><option value="day">白天</option><option value="dusk">傍晚</option></select>
+    <label title="動態模糊（快門 1/60 秒）"><input type="checkbox" id="blur" checked> 模糊</label>
+    <label title="明暗適應：進隧道先暗後慢慢適應、出隧道瞬間過曝再恢復（駕駛視角）"><input type="checkbox" id="adapt" checked> 明暗</label>
+    <label title="其他車輛（同向會超車、對向來車）"><input type="checkbox" id="traffic" checked> 車流</label>
+    <button id="shot" title="把目前的模擬畫面存成 PNG">截圖</button>
+  </div>
+  <span class="vsep"></span>
+  <div class="grp"><button class="primary" id="pickDir" title="資料夾裡的 隔音牆.png（或 南下_車道側.png）、施工圍籬.png、方案設定.xlsx 會自動對應；Illustrator 重新匯出或 Excel 存檔後自動更新">方案資料夾</button><button id="pickFiles" title="選擇個別檔案">檔案</button>
+    <span class="chips"><span class="chip">隔音牆<b id="s_wall">—</b></span><span class="chip">圍籬<b id="s_fence">—</b></span><span class="chip">設定<b id="s_xlsx">—</b></span></span>
+    <span class="status" id="watchStatus"></span></div>
+</div>
+
+<section class="board">
+  <div class="tabs" id="tabs">
+    <button data-tab="fence">施工圍籬</button><button data-tab="wall">隔音牆</button><button data-tab="bridge">鋼構橋</button>
+    <span class="status" id="bSize"></span>
+  </div>
+  <div class="toolbar">
+    <div class="pset" data-for="fence"><label>單元寬度</label><input type="number" id="fenceW" min="2" step="2" value="20"> m</div>
+    <div class="pset" data-for="wall">
+      <label>一組</label><input type="number" id="wallN" min="1" max="200" step="1" value="30" title="畫布寬度＝幾片板（每片 2 m），沿線重複"> 片 <span class="status" id="wallWv"></span>
+      <select id="mode" title="上色方式"><option value="板塊">每片板單色</option><option value="自由">圖案跨板</option></select>
+      <span class="sep"></span>
+      <label>牆高</label><select id="wallRows"></select>
+      <label>透明板</label><select id="wallGlass" title="由上往下數，幾排做成透明板"></select>
+      <label>兩端階梯</label><select id="wallStep" title="牆的起訖兩端逐片降低一排（簡章：起訖點要有漸變造型）"><option value="0">無</option><option value="1">1 階</option><option value="2">2 階</option><option value="3">3 階</option><option value="4">4 階</option><option value="6">6 階</option></select>
+      <label>紋理</label><select id="wallTex"><option value="0">素面</option><option value="1" title="吸音金屬板">水平紋</option><option value="2">直條格柵</option></select>
+    </div>
+    <div class="pset" data-for="bridge">
+      <span class="seg" id="bType"><button data-v="none">不分色</button><button data-v="slope">斜線</button><button data-v="curve">曲線</button><button data-v="band">色帶</button></span>
+      <span class="sep"></span>
+      <span class="seg" id="bMode"><button data-v="fixed">每座一樣</button><button data-v="ramp">漸變</button><button data-v="curve">依彎道</button></span>
+      <span class="sep"></span>
+      <label>橋墩</label><input type="color" id="cPier"><label>色塊</label><input type="color" id="cAcc" value="#a8d08d"><label>箱梁</label><input type="color" id="cGird">
+      <span class="sep"></span>
+      <select id="bView" title="右邊縮圖顯示哪一座"></select>
+      <button id="bAdv" title="各面分色、沿線色帶">進階…</button>
+    </div>
+    <div class="pset" data-for="band"><button id="bBack">← 返回</button><div class="faces" id="faces"></div><label class="status"><input type="checkbox" id="pAccBand"> 色塊也用沿線色帶</label><span class="status" id="bridgeInfo"></span></div>
+    <span class="sep"></span>
+    <div class="pset" data-for="fence wall band">
+      <span id="layerOps"><button id="bFill">填滿</button><button id="bUp">上移一層</button><button id="bDown">下移一層</button><button id="bDup">複製</button><button id="bDel">刪除</button><span class="sep"></span></span>
+      <label class="status">底色 <input type="color" id="bBg" value="#ffffff"></label>
+      <label class="status"><input type="checkbox" id="bGuides" checked> 格線</label>
+      <label class="status">縮放 <input type="range" id="bZoom" min="0" max="100" value="0" style="flex:none;width:80px"></label>
+    </div>
+  </div>
+  <div class="stage" id="stage"><canvas id="boardCv"></canvas></div>
+  <div class="foot">
+    <div class="hint" id="bHint"></div>
+    <div class="brand"><span>© 2026 VISION BASE<br>版權所有</span><img src="logo_visionbase.png" alt="VISION BASE"></div>
+  </div>
+</section>
+<input type="file" id="fileIn" accept=".png,.xlsx" multiple hidden>
+
+<script type="module">
+import * as THREE from 'three';
+const D = window.PREVIEW;
+const $ = id => document.getElementById(id);
+const QS = new URLSearchParams(location.search);
+if (QS.has('full')) document.body.classList.add('full');
+const SHUTTER = 1 / 60;                                   // same exposure as the UE renders (60 fps, 360° shutter)
+const PXM = 50;                                           // canvas px per metre (= the Illustrator templates)
+const WL = Object.assign({}, D.wall);                     // rows / row_h / bay_m; rows can be changed on the page (牆高)
+let RW = WL.rows * WL.row_h;
+
+// ================= 3D scene =================
+const pane = $('simPane');
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+pane.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const SKY = new THREE.Color(0xc9d4dc); scene.background = SKY;
+const FOG = [350, 3200]; scene.fog = new THREE.Fog(SKY, FOG[0], FOG[1]);
+const SUN = new THREE.Vector3(-0.45, 0.78, -0.43).normalize();
+const hemi = new THREE.HemisphereLight(0xe6edf2, 0x5d6150, 1.15); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff3e2, 1.9); sun.position.copy(SUN); scene.add(sun);
+const camera = new THREE.PerspectiveCamera(D.cam.vfov, 16 / 9, 0.1, 7000);
+const camPrev = camera.clone();
+const UP = new THREE.Vector3(0, 1, 0);
+const KEY = new THREE.Color(0.55, 0.55, 0.55), AMB = new THREE.Color(0.62, 0.62, 0.62);   // shade() light: key (sun) + ambient
+const LIGHT = `
+  uniform vec3 uSun, uFogColor, uKey, uAmb; uniform float uFogNear, uFogFar;
+  vec3 shade(vec3 albedo, vec3 n, float depth) {
+    vec3 c = albedo * (uAmb + uKey * max(dot(n, uSun), 0.0));
+    return mix(c, uFogColor, smoothstep(uFogNear, uFogFar, depth));
+  }`;
+const common = () => ({ uSun: { value: SUN }, uFogColor: { value: SKY }, uFogNear: { value: FOG[0] }, uFogFar: { value: FOG[1] }, uKey: { value: KEY }, uAmb: { value: AMB } });
+
+// bridge parts: one colour per face like the UE colour tables (0 北 1 南 2 東 3 西 4 頂 5 底). The face id is stored per vertex from the
+// part's own frame, named for the nominal layout (南下 heads south, the 南下 viaduct is on the west), so curves never swap faces.
+// A face can take its colour from the route colour band instead (aT = route position of the pier / girder point).
+// Piers can also get a two-colour split (斜率／曲度／線段) on the column: aX = across the column (0 road side .. 1 outer side),
+// aZ = metres above the ground, aShp = this pier's parameters (computed on the page from the 橋墩造型 settings).
+const BAND_TEX = new THREE.CanvasTexture(document.createElement('canvas')); BAND_TEX.colorSpace = THREE.SRGBColorSpace;
+function faceMat(shape) {
+  const u = Object.assign(common(), { cF: { value: [0, 1, 2, 3, 4, 5].map(() => new THREE.Color(0x8f969c)) }, uBand: { value: [0, 0, 0, 0, 0, 0] }, tBand: { value: BAND_TEX },
+                                      uShape: { value: 0 }, cAcc: { value: new THREE.Color(0xa8d08d) }, uAccBand: { value: 0 }, uLowOuter: { value: 0 } });
+  const SV = shape ? 'attribute float aX; attribute float aZ; attribute float aCol; attribute vec4 aShp; varying float vX; varying float vZ; varying float vCol; varying vec4 vS;' : '';
+  return new THREE.ShaderMaterial({ uniforms: u, side: THREE.DoubleSide,
+    vertexShader: SV + `attribute float aT; attribute float aF; varying float vT; varying float vF; varying vec3 vN; varying float vDepth;
+      void main() { vT = aT; vF = aF; ` + (shape ? 'vX = aX; vZ = aZ; vCol = aCol; vS = aShp; ' : '') + `vN = normal;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0); vDepth = -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: LIGHT + (shape ? 'varying float vX; varying float vZ; varying float vCol; varying vec4 vS;' : '') + `
+      uniform vec3 cF[6]; uniform float uBand[6]; uniform sampler2D tBand; uniform float uShape, uAccBand, uLowOuter; uniform vec3 cAcc;
+      varying float vT; varying float vF; varying vec3 vN; varying float vDepth;
+      vec3 bandC() { return textureLod(tBand, vec2(clamp(vT, 0.001, 0.999), 0.5), 0.0).rgb; }
+      void main() {
+        vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+        int f = int(vF + 0.5); vec3 c = cF[f];
+        if (uBand[f] > 0.5) c = bandC();` + (shape ? `
+        if (uShape > 0.5 && vCol > 0.5) {
+          bool acc = false;
+          if (uShape < 1.5) { float x = clamp(uLowOuter > 0.5 ? 1.0 - vX : vX, 0.0, 1.0); acc = vZ < vS.x + (vS.y - vS.x) * pow(x, vS.z); }
+          else { for (int k = 0; k < 12; k++) { if (float(k) > vS.z - 0.5) break; if (abs(vZ - vS.x - float(k) * vS.w) < 0.5 * vS.y) acc = true; } }
+          if (acc) c = uAccBand > 0.5 ? bandC() : cAcc;
+        }` : '') + `
+        gl_FragColor = vec4(shade(c, n, vDepth), 1.0);
+      }` });
+}
+const pierMat = faceMat(true), girderMat = faceMat(false);
+const lam = hex => new THREE.MeshLambertMaterial({ color: hex, side: THREE.DoubleSide });
+const MATS = { road: lam(0x55585a), white: lam(0xe9e9e3), yellow: lam(0xe2b43c), concrete: lam(0xbdbeb8), asphalt: lam(0x4b4d4f),
+               roadIn: lam(0x141516), whiteIn: lam(0x434341), yellowIn: lam(0x403515),        // inside the tunnels (much less light; the eye adapts)
+               girder: girderMat, pier: pierMat, overpass: lam(0xb7b8b2), abutment: lam(0xb4b4ac) };
+const offs = (m, f, u) => { m.polygonOffset = true; m.polygonOffsetFactor = f; m.polygonOffsetUnits = u; };
+offs(MATS.road, -1, -2); offs(MATS.roadIn, -1, -2); for (const k of ['white', 'yellow', 'whiteIn', 'yellowIn']) offs(MATS[k], -3, -6);
+
+// ================= 示意道路 v5 (procedural; 2026-10-27: 三種情境反覆 進出隧道／新設鋼構橋／兩側欒樹＋直路、彎路) =================
+// coordinates: m = 里程 along the road (0 = start of the drive), y = offset from the median (+ = right of the 南下 driver), h = height
+// 2026-10-27 使用者：「路段太多，不知道要看什麼」→ no empty straights / curves any more: the three scenarios follow each other with
+// 100 m transitions; round ① on the straight, round ② in curves (straight / curve is a property of each scenario now)
+const SEG = [
+  ['straight', 150, 0, '起點', ''], ['tunnel', 980, 0, '隧道①（直線）', '隧道①'], ['straight', 100, 0, '過渡', ''],
+  ['bridge', 1350, 0, '鋼構橋①（直線）', '鋼構橋①'], ['straight', 100, 0, '過渡', ''], ['trees', 900, 0, '欒樹①（直線）', '欒樹①'],
+  ['straight', 100, 0, '過渡', ''], ['tunnel', 980, 1800, '隧道②（右彎）', '隧道②・彎'], ['straight', 100, 0, '過渡', ''],
+  ['bridge', 1350, -1500, '鋼構橋②（左彎）', '鋼構橋②・彎'], ['straight', 100, 0, '過渡', ''], ['trees', 900, 1200, '欒樹②（右彎）', '欒樹②・彎'],
+  ['straight', 150, 0, '終點', '']].map(([type, L, R, name, tag]) => ({ type, L, R, name, tag }));
+{ let s = 0; for (const g of SEG) { g.s0 = s; s += g.L; g.s1 = s; } }
+const TOTAL = SEG[SEG.length - 1].s1;
+const DRIVE = [0, TOTAL], M0 = -1500, M1 = TOTAL + 1500;  // modelled; the ends run straight into the fog
+const BAND = [DRIVE[0], DRIVE[1]];                        // 沿線色帶 = the whole drive
+const LANE = 3.75, Y_IN = 1.3, Y_OUT = Y_IN + 3 * LANE, Y_PAV = Y_OUT + 3.0, Y_BAR = Y_PAV + 0.3, Y_LINE = 16.7, Y_FAR = 29.3;
+const VIA = { yc: 21.75, span: 45 };                      // viaduct centre line, span
+const sm = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+const segAt = m => SEG.find(g => m >= g.s0 && m < g.s1) || (m < 0 ? SEG[0] : SEG[SEG.length - 1]);
+const TR = 150;                                           // transition (clothoid) length at both ends of every curve
+const kappa = m => { const g = segAt(m); if (!g.R || m < g.s0 || m > g.s1) return 0; return Math.min(1, (m - g.s0) / TR, (g.s1 - m) / TR) / g.R; };   // + = turning right
+const KMAX = Math.max(...SEG.map(g => g.R ? 1 / Math.abs(g.R) : 0));
+const endW = m => sm((m - M0) / 1200) * sm((M1 - m) / 1200);
+const zOf = m => endW(m) * (4 * Math.sin((m - 300) / 800) + 2 * Math.sin((m - 1700) / 1500));   // gentle grades (±6 m)
+const NA = M1 - M0 + 1, AX = new Float64Array(NA), AZ = new Float64Array(NA), AP = new Float64Array(NA);
+{
+  const b = THREE.MathUtils.degToRad(190.4);              // start heading as the real section (南下 ~ south); three: +X east, +Z south
+  let p = Math.atan2(-Math.cos(b), Math.sin(b)), x = 0, z = 0;
+  for (let i = 0; i < NA; i++) { AX[i] = x; AZ[i] = z; AP[i] = p; const k = kappa(M0 + i + 0.5), pm = p + k * 0.5; x += Math.cos(pm); z += Math.sin(pm); p += k; }
+  const i0 = Math.round(TOTAL / 2) - M0, ox = AX[i0], oz = AZ[i0]; for (let i = 0; i < NA; i++) { AX[i] -= ox; AZ[i] -= oz; }
+}
+function fr(m) {                                          // frame at m: centre (x, z), forward f, right r, road height h
+  const t = Math.min(NA - 1.0001, Math.max(0, m - M0)), i = Math.floor(t), a = t - i, p = AP[i] + (AP[i + 1] - AP[i]) * a;
+  return { x: AX[i] + (AX[i + 1] - AX[i]) * a, z: AZ[i] + (AZ[i + 1] - AZ[i]) * a, p, fx: Math.cos(p), fz: Math.sin(p), rx: -Math.sin(p), rz: Math.cos(p), h: zOf(m) };
+}
+const P = (F, y, h, a = 0) => [F.x + F.rx * y + F.fx * a, h, F.z + F.rz * y + F.fz * a];
+const range = (a, b, st) => { const r = []; for (let m = a; m < b - 1e-6; m += st) r.push(m); r.push(b); return r; };
+function spans(a, b, holes, pad = 0) {                   // [a, b] minus the holes (each widened by pad)
+  let out = [[a, b]];
+  for (const [h0, h1] of holes) { const n = []; for (const [x0, x1] of out) { const c0 = h0 - pad, c1 = h1 + pad;
+    if (c1 <= x0 || c0 >= x1) { n.push([x0, x1]); continue; } if (c0 > x0) n.push([x0, c0]); if (c1 < x1) n.push([c1, x1]); } out = n; }
+  return out;
+}
+const within = (m, holes, pad = 0) => holes.some(([a, b]) => m >= a - pad && m <= b + pad);
+
+// tunnels (2026-10-27 使用者：主要看光線忽明忽暗、一長段隧道太長): approach cut 250 m + bore 180 m + open cut 120 m + bore 180 m
+// + exit cut 250 m, one bore per direction, under hills; the camera exposure adapts like the eye (black hole in, white hole out)
+const T_CUT = 250, T_BORE = 180, T_GAP = 120;
+const TUN = SEG.filter(g => g.type === 'tunnel').map(g => { const a1 = g.s0 + T_CUT, a2 = a1 + T_BORE, b1 = a2 + T_GAP, b2 = b1 + T_BORE;
+  return { ...g, bores: [[a1, a2], [b1, b2]], p1: a1, p2: b2 }; });
+const BORES = TUN.flatMap(T => T.bores);
+const HP = 11, DOME = 8;                                  // hill height at the portals / extra over the middle of each bore
+function hillOf(m) {
+  for (const T of TUN) {
+    if (m <= T.s0 + 40 || m >= T.s1 - 40) continue;
+    if (m < T.p1) return HP * sm((m - T.s0 - 40) / (T.p1 - T.s0 - 40));
+    if (m > T.p2) return HP * sm((T.s1 - 40 - m) / (T.s1 - 40 - T.p2));
+    for (const [a, b] of T.bores) if (m >= a && m <= b) return HP + DOME * Math.sin(Math.PI * (m - a) / (b - a));
+    return HP;                                            // open cut between the two bores
+  }
+  return 0;
+}
+// 欒樹 sections: rows of 台灣欒樹 both sides, an overpass (苗2鄉道跨越橋) at the start
+const KOEL = SEG.filter(g => g.type === 'trees').map(g => ({ ...g, mo: g.s0 + 50 }));
+// 鋼構橋 sections: both sides, ramps (引道) down to grade at both ends; piers where the deck is high enough, an embankment below that
+const RAMP = 350, H_PIER = 7.5;                          // deck ~14 m above the road -> columns ~9 m (the lower ~3.5 m hide behind walls / fences)
+const BRG = SEG.filter(g => g.type === 'bridge').map((g, b) => ({ ...g, b, line: {} }));
+const deckH = (B, sg, m) => 0.6 + sm(Math.min(m - B.s0, B.s1 - m) / RAMP) * (13.4 + 1.2 * Math.sin((m - B.s0) / 800 + (sg > 0 ? 0 : 1.7)));
+for (const B of BRG) for (const sg of [1, -1]) { let a = B.s0, b = B.s1; while (deckH(B, sg, a) < H_PIER) a++; while (deckH(B, sg, b) < H_PIER) b--; B.line[sg] = { mA0: a, mA1: b }; }
+const deckTop = (B, sg, m, F = fr(m)) => F.h + deckH(B, sg, m);
+// construction-period cross-section (2026-10-27 使用者選 B，依簡章 p.38、工程概述 p.2-3、隔音牆-1 p.2):
+//   lanes | NJ barrier | 施工圍籬 on the edge line (Y_LINE, faces the traffic) | work zone (soil; piers) | 隔音牆 on the outer edge (Y_WALL)
+// fences and walls are independent intervals with gaps between them (使用者：不必鋪滿，留空隙才有呼吸感); where both exist the wall
+// stands behind the work zone and mostly shows above the fence; where there is no wall the work zone is closed by a far fence (Y_FAR)
+const Y_WALL = 30.5;
+const FENCE = { '1': [], '-1': [] }, WALLS = { '1': [], '-1': [] };
+const put = (L, sg, g, a, b) => L[sg].push([g.s0 + a, g.s0 + b]);
+TUN.forEach((T, i) => { const s = i ? -1 : 1;              // approach: fence on one side, wall on the other (before the cut); exit swapped
+  put(FENCE, s, T, -120, 110); put(WALLS, -s, T, -140, 30); put(FENCE, -s, T, T.L - 110, T.L + 90); put(WALLS, s, T, T.L - 30, T.L + 90); });
+BRG.forEach((B, i) => { const L = B.L, s = i ? -1 : 1;    // two pier work zones per side with a gap; walls behind, not continuous
+  put(FENCE, s, B, 0, L * 0.47); put(FENCE, s, B, L * 0.53, L); put(FENCE, -s, B, 0, L * 0.36); put(FENCE, -s, B, L * 0.44, L);
+  put(WALLS, s, B, L * 0.05, L * 0.4); put(WALLS, s, B, L * 0.56, L * 0.95); put(WALLS, -s, B, L * 0.22, L * 0.78); });
+KOEL.forEach((K, i) => { const s = i ? -1 : 1;
+  put(FENCE, s, K, 80, 430); put(WALLS, s, K, 260, 830); put(WALLS, -s, K, 80, 460); put(FENCE, -s, K, 540, 870); });
+{ // keep fences off the viaduct ramp embankments and the deep tunnel cuts, walls off the tunnel hills and the overpass embankments
+  const holes = sg => [...BRG.flatMap(B => [[B.s0 - 6, B.line[sg].mA0 + 6], [B.line[sg].mA1 - 6, B.s1 + 6]]), ...TUN.map(T => [T.s0 + 120, T.s1 - 120])];
+  const wholes = [...TUN.map(T => [T.s0 + 40, T.s1 - 40]), ...KOEL.map(K => [K.mo - 22, K.mo + 22])];
+  for (const sg of [1, -1]) {
+    FENCE[sg] = FENCE[sg].flatMap(([a, b]) => spans(a, b, holes(sg))).filter(([a, b]) => b - a > 20);
+    WALLS[sg] = WALLS[sg].flatMap(([a, b]) => spans(a, b, wholes)).filter(([a, b]) => b - a > 20);
+  }
+}
+const fenceAt = (sg, m) => FENCE[sg].some(([a, b]) => m >= a && m < b), wallAt = (sg, m) => WALLS[sg].some(([a, b]) => m >= a && m < b);
+
+const H_FAR = -14;                                        // horizon plane: below every bit of the ground strip
+function gnd(m, y, F = fr(m)) {                           // road platform, 0.3 m lower beyond the shoulders, hills further out, tunnel hills
+  const A = Math.abs(y); let g = F.h - 0.02 - 0.28 * sm((A - 17) / 2);
+  const r = sm((A - 40) / 140) * endW(m);
+  if (r > 0) g += r * (2.8 * Math.sin(m / 230 + y / 170) + 1.9 * Math.sin(m / 410 - y / 260 + 1.3) + 1.2 * Math.sin(m / 97 + y / 83 + 0.4));
+  const hm = A >= 17.5 ? hillOf(m) : 0;
+  if (hm > 0) g = Math.max(g, F.h + hm * (1 + 0.45 * sm((A - 17.5) / 60)) * (1 - sm((A - 150) / 250)));
+  return g + (H_FAR + 0.02 - g) * sm((A - 600) / 600);
+}
+const bandT = m => (m - BAND[0]) / (BAND[1] - BAND[0]);
+const alOf = (sg, m) => sg > 0 ? m : 100000 - m;          // along = 里程 in that line's driving direction (same as M_FenceSkin)
+const faceOf = (na, nr, nh) => {                          // face id of an outward normal given as (along, right, up) in the road frame
+  const A = Math.abs(na), R = Math.abs(nr), H = Math.abs(nh);
+  if (H > A && H > R) return nh > 0 ? 4 : 5; if (A >= R) return na > 0 ? 1 : 0; return nr > 0 ? 3 : 2;
+};
+class Geo {
+  constructor() { this.p = []; this.i = []; this.t = []; this.c = []; this.e = {}; }
+  v(q, t = 0, ex) { this.p.push(q[0], q[1], q[2]); this.t.push(t); if (ex) for (const k in ex) (this.e[k] || (this.e[k] = [])).push(ex[k]); return this.p.length / 3 - 1; }
+  quad(a, b, c, d) { this.i.push(a, b, c, a, c, d); }
+  mesh(mat, name) {
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
+    g.setAttribute('aT', new THREE.Float32BufferAttribute(this.t, 1)); if (this.c.length) g.setAttribute('color', new THREE.Float32BufferAttribute(this.c, 3));
+    for (const k in this.e) g.setAttribute(k, new THREE.Float32BufferAttribute(this.e[k], 1));
+    g.setIndex(this.i); g.computeVertexNormals(); const me = new THREE.Mesh(g, mat); me.name = name; scene.add(me); return me;
+  }
+}
+function sweep(G, poly, closed, ms, place, tOf, fOf) {    // a cross-section (u, v) swept along the road; every edge its own strip (sharp normals)
+  const Fs = ms.map(m => fr(m)), E = closed ? poly.length : poly.length - 1;
+  for (let e = 0; e < E; e++) {
+    const a = poly[e], b = poly[(e + 1) % poly.length], base = G.p.length / 3, ex = fOf ? { aF: fOf(a, b) } : undefined;
+    ms.forEach((m, j) => { const t = tOf ? tOf(m) : 0; G.v(place(m, Fs[j], a[0], a[1]), t, ex); G.v(place(m, Fs[j], b[0], b[1]), t, ex); });
+    for (let j = 0; j < ms.length - 1; j++) { const k = base + 2 * j; G.quad(k, k + 2, k + 3, k + 1); }
+  }
+}
+function boxIn(G, Q, a0, u0, h0, la, lu, lh, t = 0) {     // box in a local frame Q(a, u, h), bottom at h0
+  const c = [[-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]].map(([a, u, h]) => Q(a0 + a * la / 2, u0 + u * lu / 2, h0 + h * lh));
+  for (const f of [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]) { const k = f.map(i => G.v(c[i], t)); G.quad(k[0], k[1], k[2], k[3]); }
+}
+const mtx = (q, rotY, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(new THREE.Vector3(q[0], q[1], q[2]), new THREE.Quaternion().setFromAxisAngle(UP, rotY), new THREE.Vector3(sx, sy, sz));
+function inst(geo, mat, Ms, name, cols) {
+  const im = new THREE.InstancedMesh(geo, mat, Ms.length); Ms.forEach((M, i) => im.setMatrixAt(i, M));
+  if (cols) cols.forEach((c, i) => im.setColorAt(i, c)); im.name = name; scene.add(im); return im;
+}
+const rnd = (() => { let s = 20261027; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+const GRASS = new THREE.Color(0x7b8964), SOIL = new THREE.Color(0x9b8d70);
+
+{ // ground (grass; bare soil inside the fenced work zones) and a plane to the horizon; the step at |y| = 17.5 is the tunnel cut
+  const GY = [-1200, -800, -600, -450, -330, -240, -170, -120, -85, -60, -45, -36, -30, -29.2, -24, -20, -19, -17.55, -17.45, -17, -16.3, -8, 0];
+  for (let i = GY.length - 2; i >= 0; i--) GY.push(-GY[i]);
+  const G = new Geo(), ms = range(M0, M1, 4), n = GY.length, cG = new THREE.Color();
+  for (const m of ms) { const F = fr(m); for (const y of GY) {
+    G.v(P(F, y, gnd(m, y, F))); const A = Math.abs(y), work = A > 16.9 && A < Y_FAR && fenceAt(Math.sign(y), m);
+    cG.copy(work ? SOIL : GRASS); cG.offsetHSL(0, 0, 0.02 * Math.sin(m / 53 + y / 31)); G.c.push(cG.r, cG.g, cG.b); } }
+  for (let j = 0; j < ms.length - 1; j++) for (let k = 0; k < n - 1; k++) { const a = j * n + k; G.quad(a, a + 1, a + n + 1, a + n); }   // facing up
+  G.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }), 'ground');
+  const hp = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshLambertMaterial({ color: 0x77845f }));
+  hp.rotation.x = -Math.PI / 2; hp.position.y = H_FAR; hp.name = 'ground'; scene.add(hp);
+}
+{ // 國1-like road: 3 lanes + 1 m inner / 3 m outer shoulder each way, NJ barriers, markings (darker inside the tunnels)
+  const out = spans(M0, M1, BORES), ins = BORES.map(b => b.slice());
+  for (const [list, mat] of [[out, MATS.road], [ins, MATS.roadIn]]) {
+    const G = new Geo();
+    for (const [a, b] of list) { const ms = range(a, b, 2), base = G.p.length / 3;
+      for (const m of ms) { const F = fr(m); G.v(P(F, -Y_BAR - 0.35, F.h)); G.v(P(F, Y_BAR + 0.35, F.h)); }
+      for (let j = 0; j < ms.length - 1; j++) G.quad(base + 2 * j, base + 2 * j + 2, base + 2 * j + 3, base + 2 * j + 1); }
+    G.mesh(mat, 'road');
+  }
+  const W = new Geo(), Yl = new Geo(), Wi = new Geo(), Yi = new Geo();
+  const strip = (Gm, y, w, ma, mb, st) => { const mm = range(ma, mb, st), b = Gm.p.length / 3;
+    for (const m of mm) { const F = fr(m); Gm.v(P(F, y - w / 2, F.h + 0.01)); Gm.v(P(F, y + w / 2, F.h + 0.01)); }
+    for (let j = 0; j < mm.length - 1; j++) Gm.quad(b + 2 * j, b + 2 * j + 2, b + 2 * j + 3, b + 2 * j + 1); };
+  for (const sg of [1, -1]) {
+    for (const [a, b] of out) { strip(Yl, sg * Y_IN, 0.15, a, b, 4); strip(W, sg * Y_OUT, 0.2, a, b, 4); }
+    for (const [a, b] of ins) { strip(Yi, sg * Y_IN, 0.15, a, b, 4); strip(Wi, sg * Y_OUT, 0.2, a, b, 4); }
+    for (const k of [1, 2]) for (let m = Math.ceil(M0 / 10) * 10; m < M1 - 4; m += 10) strip(within(m + 2, BORES) ? Wi : W, sg * (Y_IN + k * LANE), 0.15, m, m + 4, 2);   // 4 m line / 6 m gap
+  }
+  W.mesh(MATS.white, 'white'); Yl.mesh(MATS.yellow, 'yellow'); Wi.mesh(MATS.whiteIn, 'white'); Yi.mesh(MATS.yellowIn, 'yellow');
+  const NJ = [[-0.30, 0], [-0.28, 0.075], [-0.17, 0.33], [-0.075, 0.81], [0.075, 0.81], [0.17, 0.33], [0.28, 0.075], [0.30, 0]];
+  const B = new Geo();
+  for (const [a, b] of spans(M0, M1, BORES, 0.5)) { const bm = range(a, b, 4); for (const yc of [0, Y_BAR, -Y_BAR]) sweep(B, NJ, false, bm, (m, F, u, v) => P(F, yc + u, F.h + v)); }
+  B.mesh(MATS.concrete, 'concrete');
+  // glare screen on the median barrier: 20 cm blades every 1 m, 0.81 -> 1.76 m, set across the road and turned 10°
+  const gl = range(M0, M1, 1).filter(m => !within(m, BORES, 2)).map(m => { const F = fr(m); return mtx(P(F, 0, F.h + 1.285), -F.p - Math.PI / 2 + THREE.MathUtils.degToRad(10)); });
+  inst(new THREE.BoxGeometry(0.2, 0.95, 0.02), lam(0x4d7153), gl, 'glare');
+  // median lighting, every 50 m (none in the tunnels or under the overpasses)
+  const poles = [], arms = [], lamps = [];
+  for (let m = Math.ceil(M0 / 50) * 50; m < M1; m += 50) { if (within(m, BORES, 10) || KOEL.some(K => Math.abs(m - K.mo) < 16)) continue;
+    const F = fr(m), top = F.h + 0.81 + 11;
+    poles.push(mtx(P(F, 0, F.h + 0.81 + 5.5), 0));
+    for (const s of [1, -1]) { arms.push(mtx(P(F, s * 1.3, top), -F.p - Math.PI / 2)); lamps.push(mtx(P(F, s * 2.5, top - 0.12), -F.p - Math.PI / 2)); } }
+  const steel = lam(0x8d9296);
+  inst(new THREE.CylinderGeometry(0.09, 0.14, 11, 8), steel, poles, 'pole'); inst(new THREE.BoxGeometry(2.6, 0.1, 0.1), steel, arms, 'pole');
+  inst(new THREE.BoxGeometry(0.75, 0.16, 0.34), lam(0x5d6266), lamps, 'pole');
+}
+{ // tunnels: twin bores (one per direction), portal headwalls, approach retaining walls, the hill above the bores
+  const Gw = new Geo(), Gt = new Geo(), Gc = new Geo(), lights = [];
+  const BW = 7.7, SPR = 2.0, RISE = 6.0, YC = 8.3;        // bore: 0.6 .. 16.0 m from the median, walls to 2 m, elliptic arch to 8 m
+  const ell = []; for (let j = 0; j <= 18; j++) { const th = Math.PI * (1 - j / 18); ell.push([YC + BW * Math.cos(th), SPR + RISE * Math.sin(th)]); }
+  const bore = [[YC - BW, -0.05], ...ell, [YC + BW, -0.05]];
+  // light wall panels low, dark vault above (linear); daylight spills in for the first ~30 m behind each portal
+  const colOf = (v, d) => { const f = 1 + 4 * Math.exp(-d / 10); return v < 3.3 ? [0.04, 0.04, 0.038].map(c => Math.min(0.5, c * f)) : [0.007, 0.0075, 0.008].map(c => c * f); };
+  const hOpen = y => { const d = Math.abs(Math.abs(y) - YC); return d <= BW ? SPR + RISE * Math.sqrt(Math.max(0, 1 - (d / BW) ** 2)) : 0; };
+  for (const T of TUN) for (const [p1, p2] of T.bores) {
+    const ms = range(p1, p2, 3), Fs = ms.map(m => fr(m));
+    for (const s of [1, -1]) for (let e = 0; e < bore.length - 1; e++) {
+      const a = bore[e], b = bore[e + 1], base = Gt.p.length / 3;
+      ms.forEach((m, j) => { const F = Fs[j], d = Math.min(m - p1, p2 - m); Gt.v(P(F, s * a[0], F.h + a[1])); Gt.c.push(...colOf(a[1], d)); Gt.v(P(F, s * b[0], F.h + b[1])); Gt.c.push(...colOf(b[1], d)); });
+      for (let j = 0; j < ms.length - 1; j++) { const k = base + 2 * j; Gt.quad(k, k + 2, k + 3, k + 1); }
+    }
+    for (let m = p1 + 1.5; m < p2 - 1; ) { const F = fr(m), d = Math.min(m - p1, p2 - m);   // entrance / exit zones lit denser
+      for (const s of [1, -1]) for (const th of [0.78, 0.22]) lights.push(mtx(P(F, s * (YC + BW * Math.cos(Math.PI * th)), F.h + SPR + RISE * Math.sin(Math.PI * th) - 0.15), -F.p, 1.2, 0.08, 0.22));
+      m += d < 45 ? 1.5 : 3; }
+  }
+  for (const T of TUN) {
+    for (const mp of T.bores.flat()) {                  // headwall with the two openings
+      const F = fr(mp), top = F.h + HP + 0.6;
+      for (const [y0, y1, arch] of [[-17.5, -YC - BW, 0], [-YC - BW, -YC + BW, 1], [-YC + BW, YC - BW, 0], [YC - BW, YC + BW, 1], [YC + BW, 17.5, 0]]) {
+        const ys = arch ? range(y0, y1, 0.4) : [y0, y1];
+        for (let j = 0; j < ys.length - 1; j++) { const a = ys[j], b = ys[j + 1], ha = arch ? hOpen(a) : -0.3, hb = arch ? hOpen(b) : -0.3;
+          Gw.quad(Gw.v(P(F, a, F.h + ha)), Gw.v(P(F, b, F.h + hb)), Gw.v(P(F, b, top)), Gw.v(P(F, a, top))); }
+      }
+    }
+    const [[a1, a2], [b1, b2]] = T.bores;
+    for (const [a, b] of [[T.s0 + 40, a1], [a2, b1], [b2, T.s1 - 40]]) { const mm = range(a, b, 4);   // retaining walls of the cuts
+      for (const s of [1, -1]) for (let j = 0; j < mm.length - 1; j++) { const m0 = mm[j], m1 = mm[j + 1], F0 = fr(m0), F1 = fr(m1);
+        Gw.quad(Gw.v(P(F0, s * 17.5, F0.h - 0.3)), Gw.v(P(F1, s * 17.5, F1.h - 0.3)), Gw.v(P(F1, s * 17.5, F1.h + hillOf(m1) + 0.25)), Gw.v(P(F0, s * 17.5, F0.h + hillOf(m0) + 0.25))); } }
+    for (const [p1, p2] of T.bores) {                   // the hill over each bore
+      const cm = range(p1, p2, 4), cy = range(-17.5, 17.5, 3.5), n = cy.length, base = Gc.p.length / 3, cG = new THREE.Color();
+      for (const m of cm) { const F = fr(m), hh = F.h + hillOf(m); for (const y of cy) { Gc.v(P(F, y, hh)); cG.copy(GRASS).offsetHSL(0, 0, 0.02 * Math.sin(m / 53 + y / 31)); Gc.c.push(cG.r, cG.g, cG.b); } }
+      for (let j = 0; j < cm.length - 1; j++) for (let k = 0; k < n - 1; k++) { const a = base + j * n + k; Gc.quad(a, a + 1, a + n + 1, a + n); }
+    }
+  }
+  Gw.mesh(MATS.concrete, 'portal');
+  Gt.mesh(new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }), 'tunnel');
+  Gc.mesh(new THREE.MeshLambertMaterial({ vertexColors: true }), 'ground');
+  inst(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xfff0c8 }), lights, 'tunnel_light');
+}
+// 新設鋼構橋 both sides, one common type: steel box girder (one trapezoidal box, 2.3 m deep) under an RC deck 11.5 m wide,
+// on RC single-column hammerhead piers every 45 m; the piers stand 3.8 m behind the wall / fence line
+const PIER_T = { sb: [], nb: [] }, PIERS = [];
+let pierGeo;
+{
+  const DECK = [[-5.75, 0], [5.75, 0], [5.75, -0.22], [3.0, -0.40], [-3.0, -0.40], [-5.75, -0.22]];
+  const BOX = [[-3.0, -0.40], [-2.0, -2.70], [2.0, -2.70], [3.0, -0.40]];
+  const PARA = [[-0.225, 0], [-0.21, 0.1], [-0.13, 0.45], [-0.06, 1.1], [0.06, 1.1], [0.13, 0.45], [0.21, 0.1], [0.225, 0]];
+  const COL = [[-0.75, -1.3], [0.75, -1.3], [1.0, -1.05], [1.0, 1.05], [0.75, 1.3], [-0.75, 1.3], [-1.0, 1.05], [-1.0, -1.05]];   // (along, across) 2.0 x 2.6 m, chamfered
+  const CAP = [[-3.6, 0], [3.6, 0], [3.6, -1.0], [1.3, -2.2], [-1.3, -2.2], [-3.6, -1.0]];                                     // (across, height)
+  const Gd = new Geo(), Gg = new Geo(), Gp = new Geo(), Gb = new Geo(), Ga = new Geo();
+  for (const B of BRG) for (const sg of [1, -1]) {
+    const L = B.line[sg], ms = range(B.s0, B.s1, 4);
+    const place = u0 => (m, F, u, v) => P(F, sg * (VIA.yc + u0 + u), deckTop(B, sg, m, F) + v);
+    sweep(Gd, DECK, true, ms, place(0));
+    for (const m of [B.s0, B.s1]) { const F = fr(m), k = DECK.map(([u, v]) => Gd.v(place(0)(m, F, u, v))); for (let e = 1; e < DECK.length - 1; e++) Gd.i.push(k[0], k[e], k[e + 1]); }
+    for (const u0 of [-5.525, 5.525]) sweep(Gd, PARA, false, ms, place(u0));
+    sweep(Gg, BOX, false, ms, place(0), bandT, (a, b) => { let nu = b[1] - a[1], nv = -(b[0] - a[0]); if (nu * (a[0] + b[0]) / 2 + nv * ((a[1] + b[1]) / 2 + 1.55) < 0) { nu = -nu; nv = -nv; } return faceOf(0, sg * nu, nv); });
+    for (const [a, b, endAt] of [[B.s0, L.mA0, L.mA0], [L.mA1, B.s1, L.mA1]]) {   // embankment (RC retaining walls) under the low ends
+      const mm = range(a, b, 2);
+      for (const yy of [16.5, 27.5]) for (let j = 0; j < mm.length - 1; j++) { const m0 = mm[j], m1 = mm[j + 1], F0 = fr(m0), F1 = fr(m1), y = sg * yy;
+        Ga.quad(Ga.v(P(F0, y, gnd(m0, y, F0) - 0.3)), Ga.v(P(F1, y, gnd(m1, y, F1) - 0.3)), Ga.v(P(F1, y, deckTop(B, sg, m1, F1) - 0.3)), Ga.v(P(F0, y, deckTop(B, sg, m0, F0) - 0.3))); }
+      const F = fr(endAt), y0 = sg * 16.5, y1 = sg * 27.5, dt = deckTop(B, sg, endAt, F) - 0.3;
+      Ga.quad(Ga.v(P(F, y0, gnd(endAt, y0, F) - 0.3)), Ga.v(P(F, y1, gnd(endAt, y1, F) - 0.3)), Ga.v(P(F, y1, dt)), Ga.v(P(F, y0, dt)));
+    }
+    const pm = []; for (let m = L.mA0 + (sg > 0 ? 20 : 32); m <= L.mA1 - 15; m += VIA.span) pm.push(m);
+    pm.forEach((m, rank) => {
+      const F = fr(m), yc = sg * VIA.yc, top = deckTop(B, sg, m, F) - 2.70 - 0.35, gs = gnd(m, yc, F), g = gs - 0.6, t = bandT(m);
+      const Q = (a, u, h) => P(F, yc + u, h, a), v0 = Gp.p.length / 3;
+      for (let e = 0; e < 8; e++) { const p = COL[e], q = COL[(e + 1) % 8];
+        let na = q[1] - p[1], nu = -(q[0] - p[0]); if (na * (p[0] + q[0]) + nu * (p[1] + q[1]) < 0) { na = -na; nu = -nu; }
+        const f = faceOf(na, nu, 0), ex = (pt, h) => ({ aF: f, aX: (sg * pt[1] + 1.3) / 2.6, aZ: h - gs, aCol: 1 });
+        Gp.quad(Gp.v(Q(p[0], p[1], g), t, ex(p, g)), Gp.v(Q(q[0], q[1], g), t, ex(q, g)), Gp.v(Q(q[0], q[1], top - 2.1), t, ex(q, top - 2.1)), Gp.v(Q(p[0], p[1], top - 2.1), t, ex(p, top - 2.1))); }
+      const exc = f => ({ aF: f, aX: 0, aZ: 0, aCol: 0 });
+      for (let e = 0; e < 6; e++) { const p = CAP[e], q = CAP[(e + 1) % 6];
+        let nu = q[1] - p[1], nh = -(q[0] - p[0]); if (nu * (p[0] + q[0]) + nh * ((p[1] + q[1]) / 2 + 1.1) * 2 < 0) { nu = -nu; nh = -nh; }
+        const f = faceOf(0, nu, nh);
+        Gp.quad(Gp.v(Q(-1.1, p[0], top + p[1]), t, exc(f)), Gp.v(Q(-1.1, q[0], top + q[1]), t, exc(f)), Gp.v(Q(1.1, q[0], top + q[1]), t, exc(f)), Gp.v(Q(1.1, p[0], top + p[1]), t, exc(f))); }
+      for (const a of [-1.1, 1.1]) { const f = a > 0 ? 1 : 0, k = CAP.map(p => Gp.v(Q(a, p[0], top + p[1]), t, exc(f))); for (let e = 1; e < 5; e++) Gp.i.push(k[0], k[e], k[e + 1]); }
+      for (const u of [-1.5, 1.5]) boxIn(Gb, Q, 0, u, top, 0.7, 0.7, 0.36);
+      PIERS.push({ sg, b: B.b, m, n: pm.length, k: sg > 0 ? rank : pm.length - 1 - rank, kap: Math.abs(kappa(m)), t, zTop: top - gs, v0, v1: Gp.p.length / 3 });
+      PIER_T[sg > 0 ? 'sb' : 'nb'].push(t);
+    });
+  }
+  Gd.mesh(MATS.concrete, 'deck'); Gg.mesh(MATS.girder, 'girder'); Gb.mesh(lam(0x55595c), 'bearing'); Ga.mesh(MATS.abutment, 'abutment');
+  pierGeo = Gp.mesh(MATS.pier, 'pier').geometry;
+  pierGeo.setAttribute('aShp', new THREE.BufferAttribute(new Float32Array(pierGeo.attributes.position.count * 4), 4));
+}
+{ // overpass at the start of each 欒樹 section (苗2鄉道跨越橋): one span over the road, embankments down to the fields
+  for (const K of KOEL) {
+    const mo = K.mo, F = fr(mo), G = new Geo(), flat = F.h + 7.4, Q = (a, y, h) => P(F, y, h, a);
+    const topAt = y => { const A = Math.abs(y); return A <= 40 ? flat : flat + (gnd(mo, y, F) + 0.2 - flat) * sm((A - 40) / 70); };
+    const ys = [...new Set([...range(-110, -18.5, 2), ...range(-18.5, 18.5, 1.85), ...range(18.5, 110, 2)].map(v => +v.toFixed(3)))].sort((a, b) => a - b);
+    const E = new Geo(), cG = new THREE.Color(), slope = y => 6 + 1.5 * Math.max(0, topAt(y) - gnd(mo, y, F));   // grassed 1:1.5 embankments
+    for (let j = 0; j < ys.length - 1; j++) {
+      const y0 = ys[j], y1 = ys[j + 1], t0 = topAt(y0), t1 = topAt(y1), span = Math.abs((y0 + y1) / 2) < 18.5;
+      G.quad(G.v(Q(-6, y0, t0)), G.v(Q(-6, y1, t1)), G.v(Q(6, y1, t1)), G.v(Q(6, y0, t0)));
+      if (span) {
+        for (const a of [-6, 6]) G.quad(G.v(Q(a, y0, t0 - 1.5)), G.v(Q(a, y1, t1 - 1.5)), G.v(Q(a, y1, t1)), G.v(Q(a, y0, t0)));
+        G.quad(G.v(Q(-6, y0, t0 - 1.5)), G.v(Q(-6, y1, t1 - 1.5)), G.v(Q(6, y1, t1 - 1.5)), G.v(Q(6, y0, t0 - 1.5)));
+      } else for (const s of [-1, 1]) {
+        const k = [E.v(Q(s * slope(y0), y0, gnd(mo, y0, F) - 0.2)), E.v(Q(s * slope(y1), y1, gnd(mo, y1, F) - 0.2)), E.v(Q(s * 6, y1, t1)), E.v(Q(s * 6, y0, t0))];
+        for (let i = 0; i < 4; i++) { cG.copy(GRASS).offsetHSL(0, 0, i < 2 ? 0.01 : -0.01); E.c.push(cG.r, cG.g, cG.b); }
+        E.quad(k[0], k[1], k[2], k[3]);
+      }
+      for (const a of [-5.8, 5.8]) G.quad(G.v(Q(a, y0, t0)), G.v(Q(a, y1, t1)), G.v(Q(a, y1, t1 + 1.0)), G.v(Q(a, y0, t0 + 1.0)));
+    }
+    for (const y of [-18.5, 18.5]) { const g0 = gnd(mo, y, F) - 0.3, t = topAt(y) - 1.5, w = slope(y);   // abutment face with wing walls
+      G.quad(G.v(Q(-w, y, g0)), G.v(Q(w, y, g0)), G.v(Q(6, y, t)), G.v(Q(-6, y, t))); }
+    G.mesh(MATS.overpass, 'overpass');
+    E.mesh(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), 'ground');
+  }
+}
+{ // trees beyond the viaducts, forest on the tunnel hills, low buildings further out (gives the eye something to judge speed by)
+  const tr = [], cr = [], cc = [], bd = [], bc = [], c = new THREE.Color();
+  const PAL = [0xd8d4ca, 0xc9c6bd, 0xb8b3a7, 0xe0ddd5, 0xa3a7aa, 0xc2b8a3, 0xbfc4c6];
+  const inSeg = (m, type, pad = 0) => SEG.some(g => g.type === type && m >= g.s0 - pad && m <= g.s1 + pad);
+  const tree = (F, y, g, s) => { tr.push(mtx(P(F, y, g + 1.5 * s), 0, s, s, s)); cr.push(mtx(P(F, y, g + 4.4 * s), rnd() * 6, 2.4 * s, 2.9 * s, 2.4 * s));
+    cc.push(c.setHSL(0.24 + rnd() * 0.06, 0.28 + rnd() * 0.12, 0.26 + rnd() * 0.08).clone()); };
+  for (const sg of [1, -1]) {
+    for (let m = M0; m < M1; m += 5 + rnd() * 12) for (const [y0, dy, p] of [[33, 45, 1], [80, 140, 0.45]]) {
+      if (rnd() > p) continue;
+      const mm = m + rnd() * 4, y = sg * (y0 + rnd() * dy);
+      if (KOEL.some(K => Math.abs(mm - K.mo) < 14) || (y0 < 50 && inSeg(mm, 'trees'))) continue;
+      const F = fr(mm); tree(F, y, gnd(mm, y, F), 0.8 + rnd() * 0.7);
+    }
+    for (let m = M0; m < M1; m += 24 + rnd() * 40) {
+      if (inSeg(m, 'tunnel', 150)) continue;
+      const y = sg * (118 + rnd() * 380), F = fr(m), g = gnd(m, y, F) - 1, tall = rnd() < 0.14;
+      bd.push(mtx(P(F, y, g), -F.p + (rnd() - 0.5) * 0.3, 10 + rnd() * 26, tall ? 26 + rnd() * 34 : 6 + rnd() * 15, 9 + rnd() * 20));
+      bc.push(new THREE.Color(PAL[Math.floor(rnd() * PAL.length)]));
+    }
+  }
+  for (const T of TUN) for (let m = T.s0 + 60; m < T.s1 - 60; m += 3 + rnd() * 4) for (let k = 0; k < 3; k++) {
+    const y = (rnd() * 2 - 1) * 150, A = Math.abs(y);
+    if (A < 19 && !T.bores.some(([a, b]) => m > a + 15 && m < b - 15)) continue;   // keep the cuts and the portals clear
+    const F = fr(m); tree(F, y, A < 17.5 ? F.h + hillOf(m) : gnd(m, y, F), 0.8 + rnd() * 0.7);
+  }
+  inst(new THREE.CylinderGeometry(0.16, 0.24, 3, 6), lam(0x5a4a3a), tr, 'tree');
+  inst(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), cr, 'tree', cc);
+  const bg = new THREE.BoxGeometry(1, 1, 1); bg.translate(0, 0.5, 0);
+  inst(bg, new THREE.MeshLambertMaterial({ color: 0xffffff }), bd, 'building', bc);
+}
+{ // 台灣欒樹 rows both sides (autumn: green crowns with yellow flower clusters and salmon-red capsules on top)
+  const trunks = [], crowns = [], ccol = [], tops = [], tcol = [];
+  const LEAF = new THREE.Color(0x5e7a3a), FLOWER = new THREE.Color(0xd9b52c), CAPS = new THREE.Color(0xc66f55);
+  for (const K of KOEL) for (const sg of [1, -1]) for (const [row, y0] of [[0, 34], [1, 40.5], [2, 47], [3, 53.5]]) {   // beyond the outer wall line
+    for (let m = K.s0 + 80 + row * 5; m < K.s1 - 10; m += 10 + rnd() * 3) {
+      const mm = m + (rnd() - 0.5) * 2, y = sg * (y0 + (rnd() - 0.5) * 1.6), F = fr(mm), g = gnd(mm, y, F), s = 0.85 + rnd() * 0.35;
+      trunks.push(mtx(P(F, y, g + 1.8 * s), 0, s, 1.2 * s, s));
+      crowns.push(mtx(P(F, y, g + 5.6 * s), rnd() * 6, 3.3 * s, 2.5 * s, 3.3 * s));
+      ccol.push(LEAF.clone().lerp(CAPS, rnd() * 0.25).offsetHSL(0, 0, (rnd() - 0.5) * 0.06));
+      for (let j = 0; j < 3; j++) { const an = rnd() * 6.28, rr = 1.2 + rnd() * 1.4;
+        tops.push(mtx(P(F, y + Math.cos(an) * rr, g + (6.6 + rnd() * 1.4) * s, Math.sin(an) * rr), rnd() * 6, 1.4 * s, 1.1 * s, 1.4 * s));
+        tcol.push((rnd() < 0.55 ? FLOWER : CAPS).clone().offsetHSL(0, 0, (rnd() - 0.5) * 0.08)); }
+    }
+  }
+  inst(new THREE.CylinderGeometry(0.16, 0.26, 3, 6), lam(0x54463a), trunks, 'koel');
+  const ico = new THREE.IcosahedronGeometry(1, 0), km = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  inst(ico, km, crowns, 'koel', ccol); inst(ico, km, tops, 'koel', tcol);
+}
+
+// ---- sound walls: colours from the design canvas exactly like skin_compile.py ----
+// rows from the bottom; the top uGlass rows are transparent panels (tinted by the design); uTex = panel relief (素面／水平紋／垂直格柵)
+function wallMat(tex) {
+  return new THREE.ShaderMaterial({ side: THREE.DoubleSide, transparent: true,
+    uniforms: Object.assign(common(), { tDesign: { value: tex }, uW: { value: 60 }, uNu: { value: 30 }, uRows: { value: WL.rows }, uRowH: { value: WL.row_h }, uMode: { value: 1 },
+                                        uGlass: { value: 0 }, uTex: { value: 0 } }),
+    vertexShader: `attribute float aAlong; attribute float aH; attribute float aBay;
+      varying float vAlong; varying float vH; varying float vBay; varying vec3 vN; varying float vDepth;
+      void main() { vAlong = aAlong; vH = aH; vBay = aBay; vN = normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vDepth = -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: LIGHT + `
+      uniform sampler2D tDesign; uniform float uW, uNu, uRows, uRowH, uMode, uGlass, uTex;
+      varying float vAlong; varying float vH; varying float vBay; varying vec3 vN; varying float vDepth;
+      void main() {
+        vec3 albedo; vec3 n = normalize(vN); float r = clamp(floor(vH / uRowH), 0.0, uRows - 1.0);
+        bool glass = r >= uRows - uGlass - 0.5;
+        if (gl_FrontFacing) {
+          if (uMode > 0.5) {                                   // 板塊: panel i -> canvas cell (i mod N), one colour per panel
+            float a = (mod(floor(vBay + 0.5), uNu) + 0.5) / uNu;
+            albedo = textureLod(tDesign, vec2(1.0 - a, (r + 0.5) / uRows), 0.0).rgb;
+          } else {                                             // 自由: real metres, canvas left = driving forward
+            float uc = -vAlong / uW, vc = clamp(vH / (uRows * uRowH), 0.0, 1.0);
+            albedo = textureGrad(tDesign, vec2(fract(uc), vc), vec2(dFdx(uc), dFdx(vc)), vec2(dFdy(uc), dFdy(vc))).rgb;
+          }
+          if (!glass && uTex > 0.5) {
+            if (uTex < 1.5) albedo *= 0.9 + 0.1 * smoothstep(0.35, 0.5, abs(fract(vH * 10.0) - 0.5) * 2.0);    // 吸音金屬板: 10 cm ribs
+            else albedo *= 0.84 + 0.16 * step(0.3, fract(vAlong * 6.0));                                     // 垂直格柵: slats
+          }
+        } else { albedo = glass ? vec3(0.5) : vec3(0.262, 0.275, 0.262); n = -n; }  // 鄰房側: neutral grey
+        vec3 c = shade(albedo, n, vDepth);
+        if (glass) { c = mix(c, vec3(0.72, 0.8, 0.82), 0.35); gl_FragColor = vec4(c, 0.38); } else gl_FragColor = vec4(c, 1.0);
+      }` });
+}
+const WMATS = [], WALL_OBJ = [];
+let WALL_GEOM = { len: 0, area: 0, glass: 0 };
+// sound walls on the edge line, lane side facing the traffic of that line; on a 0.35 m concrete curb, H-posts every 2 m.
+// panels counted from the start of each wall in that line's driving direction (板塊 mode), along = 里程 (自由 mode).
+// 端部階梯: the end panels step down one row per panel. Rebuilt when the height / steps change.
+function buildWalls() {
+  for (const o of WALL_OBJ) { scene.remove(o); o.geometry.dispose(); } WALL_OBJ.length = 0;
+  const glass = Number($('wallGlass').value) || 0, steps = Number($('wallStep').value) || 0;
+  const posts = [], curb = new Geo(), CURB = [[-0.2, 0], [-0.2, 0.35], [0.2, 0.35], [0.2, 0]], B0 = 0.35;
+  let wi = 0, len = 0, area = 0, glassA = 0;
+  for (const sg of [1, -1]) for (const [a, b] of WALLS[sg]) {
+    const y = sg * Y_WALL, n = Math.floor((b - a) / WL.bay_m), mb = a + n * WL.bay_m, line = sg > 0 ? 'SB' : 'NB';
+    let w = WMATS[wi]; if (!w) { w = { mat: wallMat(null), line }; WMATS.push(w); } w.line = line; wi++;
+    const pos = [], nor = [], al = [], hh = [], bi = [], idx = [], rowsOf = k => Math.max(1, WL.rows - Math.max(0, steps - Math.min(k, n - 1 - k)));
+    for (let k = 0; k < n; k++) {
+      const m0 = a + k * WL.bay_m, m1 = m0 + WL.bay_m, F0 = fr(m0), F1 = fr(m1), bay = sg > 0 ? k : n - 1 - k, H = rowsOf(k) * WL.row_h;
+      const p0 = P(F0, y, gnd(m0, y, F0) + B0), p1 = P(F1, y, gnd(m1, y, F1) + B0);
+      const nx = -sg * (F0.rx + F1.rx) / 2, nz = -sg * (F0.rz + F1.rz) / 2, L = Math.hypot(nx, nz);   // toward the lanes
+      const e = [p1[0] - p0[0], p1[2] - p0[2]], flip = (-e[1] * nx + e[0] * nz) < 0, s = pos.length / 3;
+      for (const [q, hgt, mm] of [[p0, 0, m0], [p1, 0, m1], [p1, H, m1], [p0, H, m0]]) {
+        pos.push(q[0], q[1] + hgt, q[2]); nor.push(nx / L, 0, nz / L); al.push(alOf(sg, mm)); hh.push(hgt); bi.push(bay); }
+      if (!flip) idx.push(s, s + 1, s + 2, s, s + 2, s + 3); else idx.push(s, s + 2, s + 1, s, s + 3, s + 2);
+      len += WL.bay_m; area += WL.bay_m * H; glassA += WL.bay_m * WL.row_h * Math.max(0, Math.min(glass, rowsOf(k) - (WL.rows - glass) >= 0 ? rowsOf(k) - (WL.rows - glass) : 0));
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('aAlong', new THREE.Float32BufferAttribute(al, 1)); g.setAttribute('aH', new THREE.Float32BufferAttribute(hh, 1));
+    g.setAttribute('aBay', new THREE.Float32BufferAttribute(bi, 1)); g.setIndex(idx);
+    const me = new THREE.Mesh(g, w.mat); me.name = 'wall_' + line; me.userData = { sg }; me.renderOrder = 2; scene.add(me); WALL_OBJ.push(me);
+    for (let k = 0; k <= n; k++) { const m = a + k * WL.bay_m, F = fr(m), H = Math.max(rowsOf(Math.min(k, n - 1)), rowsOf(Math.max(0, k - 1))) * WL.row_h;
+      posts.push(mtx(P(F, y, gnd(m, y, F) + B0), -F.p, 0.15, H + 0.08, 0.2)); }
+    sweep(curb, CURB, false, range(a, mb, 4), (m, F, u, v) => P(F, y + u, gnd(m, y, F) - 0.1 + (v > 0 ? B0 + 0.1 : 0)));
+  }
+  const pg = new THREE.BoxGeometry(1, 1, 1); pg.translate(0, 0.5, 0);
+  WALL_OBJ.push(inst(pg, lam(0x4a4d50), posts, 'wallpost'), curb.mesh(MATS.concrete, 'curb'));
+  for (const { mat } of WMATS) { mat.uniforms.uRows.value = WL.rows; mat.uniforms.uGlass.value = glass; }
+  WALL_GEOM = { len, area, glass: glassA };
+}
+// ---- construction fences (2.4 m sheet on a 15 cm base; canvas left = forward for the traffic it faces) ----
+const fenceMat = new THREE.ShaderMaterial({ side: THREE.DoubleSide,
+  uniforms: Object.assign(common(), { tFence: { value: null }, uFW: { value: 20 } }),
+  vertexShader: `attribute float aAlong; attribute float aV; varying float vAlong; varying float vV; varying vec3 vN; varying float vDepth;
+    void main() { vAlong = aAlong; vV = aV; vN = normal; vec4 mv = modelViewMatrix * vec4(position, 1.0); vDepth = -mv.z; gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: LIGHT + `
+    uniform sampler2D tFence; uniform float uFW; varying float vAlong; varying float vV; varying vec3 vN; varying float vDepth;
+    void main() {
+      vec3 n = normalize(vN), albedo;
+      if (gl_FrontFacing) {
+        float uc = -vAlong / uFW;
+        albedo = textureGrad(tFence, vec2(fract(uc), vV), vec2(dFdx(uc), dFdx(vV)), vec2(dFdy(uc), dFdy(vV))).rgb;
+        albedo *= 0.93 + 0.07 * step(0.5, fract(vAlong * 5.0));            // corrugation ribs, 10 cm
+      } else { albedo = vec3(0.42, 0.43, 0.43); n = -n; }
+      gl_FragColor = vec4(shade(albedo, n, vDepth), 1.0);
+    }` });
+let FENCE_LEN = 0;
+{ // work zone around the piers: fence on the edge line facing the traffic, a second line along the far side (Y_FAR, facing
+  // outward) and returns across at both ends facing the traffic that approaches them
+  const pos = [], nor = [], al = [], vv = [], idx = [], H = 2.4, B0 = 0.12, posts = [];
+  const panel = (p0, p1, a0, a1, toward) => {
+    const e = [p1[0] - p0[0], p1[2] - p0[2]], L = Math.hypot(e[0], e[1]); let n = [-e[1] / L, e[0] / L];
+    const flip = n[0] * (toward[0] - p0[0]) + n[1] * (toward[2] - p0[2]) < 0; if (flip) n = [-n[0], -n[1]];
+    const s = pos.length / 3; FENCE_LEN += L;
+    for (const [q, hgt, a] of [[p0, 0, a0], [p1, 0, a1], [p1, H, a1], [p0, H, a0]]) { pos.push(q[0], q[1] + hgt, q[2]); nor.push(n[0], 0, n[1]); al.push(a); vv.push(hgt / H); }
+    if (!flip) idx.push(s, s + 1, s + 2, s, s + 2, s + 3); else idx.push(s, s + 2, s + 1, s, s + 3, s + 2);
+  };
+  for (const sg of [1, -1]) for (const [a, b] of FENCE[sg]) {
+    const y = sg * Y_LINE, yf = sg * Y_FAR, ms = range(a, b, 2), at = (m, yy) => { const F = fr(m); return P(F, yy, gnd(m, yy, F) + B0); };
+    for (let j = 0; j < ms.length - 1; j++) {
+      const m0 = ms[j], m1 = ms[j + 1], Fm = fr((m0 + m1) / 2);
+      panel(at(m0, y), at(m1, y), alOf(sg, m0), alOf(sg, m1), P(Fm, sg * 8, Fm.h));
+      if (!wallAt(sg, (m0 + m1) / 2)) panel(at(m0, yf), at(m1, yf), alOf(sg, m0), alOf(sg, m1), P(Fm, sg * 60, Fm.h));   // the wall closes the zone where it exists
+    }
+    for (const [m, s] of [[a, -1], [b, 1]]) {                 // returns
+      const Ft = fr(m + s * 30), w = Y_FAR - Y_LINE, n = Math.ceil(w / 2);
+      for (let j = 0; j < n; j++) { const y0 = sg * (Y_FAR - w * j / n), y1 = sg * (Y_FAR - w * (j + 1) / n);
+        panel(at(m, y0), at(m, y1), alOf(sg, m) + (w - w * j / n) * s * sg, alOf(sg, m) + (w - w * (j + 1) / n) * s * sg, P(Ft, sg * 8, Ft.h)); }
+    }
+    for (const m of ms) { const F = fr(m); for (const yy of [y + sg * 0.07, yf - sg * 0.07]) posts.push(mtx(P(F, yy, gnd(m, yy, F)), -F.p, 0.08, H + B0 + 0.1, 0.08)); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('aAlong', new THREE.Float32BufferAttribute(al, 1)); g.setAttribute('aV', new THREE.Float32BufferAttribute(vv, 1)); g.setIndex(idx);
+  const fm = new THREE.Mesh(g, fenceMat); fm.name = 'fence'; scene.add(fm);
+  const pg = new THREE.BoxGeometry(1, 1, 1); pg.translate(0, 0.5, 0); inst(pg, lam(0x5b5f62), posts, 'fencepost');
+}
+
+// ---- traffic (2026-10-27 使用者：視角前後加其他車輛，時不時被超車): own scene, drawn after the motion-blur pass and depth-tested
+// against the scene (so cars are not smeared like the static scenery). 南下: inner lane faster (overtakes us), outer lane trucks /
+// buses slower (we pass them), middle lane keeps clear of the camera; 北上: oncoming. Cars keep their distance within a lane.
+const traffic = new THREE.Scene(); traffic.fog = scene.fog;
+const tHemi = new THREE.HemisphereLight(0xe6edf2, 0x5d6150, 1.15), tSun = new THREE.DirectionalLight(0xfff3e2, 1.9); tSun.position.copy(SUN); traffic.add(tHemi, tSun);
+const VEH = [];
+{
+  const boxG = new THREE.BoxGeometry(1, 1, 1); boxG.translate(0, 0.5, 0);
+  const wheelG = new THREE.CylinderGeometry(0.34, 0.34, 0.26, 12); wheelG.rotateX(Math.PI / 2);
+  const WHEEL = new THREE.MeshLambertMaterial({ color: 0x151719 }), GLASS = 0x1b2125;
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  const CARS = [0xe8e8e6, 0xe8e8e6, 0xe8e8e6, 0xa9adb1, 0xa9adb1, 0x1e2124, 0x1e2124, 0x5d6266, 0x9c2a25, 0x2c4a7a, 0x7d8a8f];
+  function vehicle(kind) {                               // local +x = forward, +z = right, y up from the road
+    const g = new THREE.Group(), mats = [];
+    const add = (col, x, y, z, sx, sy, sz, lamp) => { const m = lamp ? new THREE.MeshBasicMaterial({ color: col }) : new THREE.MeshLambertMaterial({ color: col });
+      m.userData.base = m.color.clone(); mats.push(m); const me = new THREE.Mesh(boxG, m); me.position.set(x, y, z); me.scale.set(sx, sy, sz); g.add(me); };
+    let L, W;
+    if (kind === 'truck') { L = 12; W = 2.5;
+      add(pick([0xe6e6e2, 0x2f4f7a, 0xa33a2a, 0x3f6b4a]), L / 2 - 1.2, 0.5, 0, 2.4, 2.7, W); add(GLASS, L / 2 - 0.02, 1.9, 0, 0.06, 0.85, W - 0.3);
+      add(pick([0xdedfdc, 0xc9ccce, 0x2f5d8a, 0xd8d1c2, 0xb24a2c]), -1.3, 0.95, 0, L - 3.0, 3.0, W);
+    } else if (kind === 'bus') { L = 12; W = 2.5;
+      add(pick([0xe9e9e4, 0x3f7f5f, 0x2c5d8f, 0xc9a43a]), 0, 0.42, 0, L, 2.95, W); add(GLASS, 0.15, 1.75, 0, L - 0.5, 0.95, W + 0.04);
+    } else { const suv = kind === 'suv'; L = suv ? 4.8 : 4.6; W = 1.85;
+      add(pick(CARS), 0, 0.3, 0, L, suv ? 0.98 : 0.74, W); add(GLASS, suv ? -0.25 : -0.3, suv ? 1.28 : 1.04, 0, suv ? 3.1 : 2.4, suv ? 0.62 : 0.48, W - 0.14);
+    }
+    for (const s of [-1, 1]) add(0x7a1010, -L / 2 - 0.02, kind === 'car' ? 0.72 : 0.95, s * (W / 2 - 0.28), 0.04, 0.16, 0.36, true);   // tail lights
+    for (const x of (L > 8 ? [L / 2 - 1.6, -L / 2 + 2.4, -L / 2 + 1.1] : [L / 2 - 0.95, -L / 2 + 0.95]))
+      for (const s of [-1, 1]) { const w = new THREE.Mesh(wheelG, WHEEL); w.position.set(x, 0.34, s * (W / 2 - 0.1)); g.add(w); }
+    traffic.add(g); return { g, mats, L };
+  }
+  for (let i = 0; i < 28; i++) {
+    const sb = i < 17, r = rnd(), kind = r < 0.55 ? 'car' : r < 0.78 ? 'suv' : r < 0.92 ? 'truck' : 'bus', big = kind === 'truck' || kind === 'bus';
+    const lane = big ? 2 : sb ? [0, 0, 1, 2][i % 4] : Math.floor(rnd() * 3);
+    const v0 = sb ? (lane === 0 ? 30 + rnd() * 3.5 : lane === 1 ? 25.5 + rnd() * 3 : big ? 22 + rnd() * 2.5 : 25 + rnd() * 2) : 24 + rnd() * 8;   // m/s
+    VEH.push({ ...vehicle(kind), sb, lane, v0, v: v0, m: 0, k: -1 });
+  }
+}
+const laneY = (V) => (V.sb ? 1 : -1) * (Y_IN + (V.lane + 0.5) * LANE);
+function spawnVeh(V, camM, where) {                       // where: any | ahead | behind
+  for (let t = 0; t < 14; t++) {
+    const m = !V.sb ? camM + (where === 'any' ? -150 + rnd() * 950 : 500 + rnd() * 450)
+      : where === 'ahead' ? camM + 430 + rnd() * 280 : where === 'behind' ? camM - 230 - rnd() * 160 : camM - 220 + rnd() * 900;
+    if (V.sb && V.lane === 1 && m > camM - 50 && m < camM + 55) continue;
+    if (VEH.every(o => o === V || o.sb !== V.sb || o.lane !== V.lane || Math.abs(o.m - m) > 32)) { V.m = m; V.v = V.v0; return; }
+  }
+  V.m = camM + (V.sb ? -3000 : 3000);                    // no free slot: park it far away until the next recycle
+}
+let tCam = null;
+function updateTraffic(camM, vCam, dt) {
+  const on = $('traffic').checked; for (const V of VEH) V.g.visible = on; if (!on) return;
+  if (tCam === null || Math.abs(camM - tCam) > 60) VEH.forEach(V => spawnVeh(V, camM, 'any'));   // start or a jump
+  tCam = camM;
+  for (const V of VEH) {
+    if (dt > 0) {
+      let v = V.v0;
+      if (V.sb) {                                          // follow the vehicle (or the camera) ahead in the same lane
+        let gap = 1e9, lead = v;
+        for (const o of VEH) if (o !== V && o.sb && o.lane === V.lane && o.m > V.m && o.m - V.m < gap) { gap = o.m - V.m; lead = o.v; }
+        if (V.lane === 1) { const d = camM - V.m; if (d > 0 && d < gap) { gap = d; lead = vCam; } else if (d <= 0 && -d < 60) v = Math.max(v, vCam + 0.5); }
+        if (gap < 45) v = Math.min(v, lead * (gap < 30 ? 0.9 : 1));
+      }
+      V.v += (v - V.v) * Math.min(1, dt * 1.5); V.m += (V.sb ? 1 : -1) * V.v * dt;
+      const rel = V.m - camM;
+      if (V.sb && (rel > 780 || rel < -430)) spawnVeh(V, camM, V.v > vCam + 0.5 ? 'behind' : 'ahead');
+      if (!V.sb && rel < -260) spawnVeh(V, camM, 'ahead');
+    }
+    const F = fr(V.m), q = P(F, laneY(V), F.h);
+    V.g.position.set(q[0], q[1], q[2]); V.g.rotation.y = -F.p + (V.sb ? 0 : Math.PI);
+    const inT = within(V.m, BORES), k = inT ? 1 : 0;      // much less light inside the tunnels (the tail lights stay)
+    if (V.k !== k) { V.k = k; for (const mt of V.mats) mt.color.copy(mt.userData.base).multiplyScalar(mt.isMeshBasicMaterial ? (inT ? 2.5 : 1) : (inT ? 0.1 : 1)); }
+  }
+}
+
+// ================= design canvases (boards) =================
+const BOARDS = {};
+class Board {
+  constructor(key, label, wM, hM, opts = {}) {
+    this.key = key; this.label = label; this.layers = []; this.bg = opts.bg || '#ffffff'; this.transparent = !!opts.transparent;
+    this.out = document.createElement('canvas'); this.setSize(wM, hM);
+    this.tex = opts.tex || new THREE.CanvasTexture(this.out); this.tex.image = this.out;
+    this.tex.colorSpace = THREE.SRGBColorSpace; this.tex.wrapS = THREE.RepeatWrapping; this.tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    this.file = opts.file; this.guides = opts.guides || (() => {}); this.cellOf = opts.cellOf || null; this.sel = -1; this.cell = null; this.dirty = true;
+  }
+  setSize(wM, hM, pxW, pxH) { this.wM = wM; this.hM = hM; this.out.width = pxW || Math.max(2, Math.round(wM * PXM)); this.out.height = pxH || Math.max(1, Math.round(hM * PXM)); this.dirty = true; this.cell = null; }
+  render() {
+    const c = this.out.getContext('2d'); c.clearRect(0, 0, this.out.width, this.out.height);
+    if (!this.transparent || this.layers.length) { c.fillStyle = this.bg; c.fillRect(0, 0, this.out.width, this.out.height); }
+    for (const L of this.layers) { c.save(); c.globalAlpha = L.alpha ?? 1; c.drawImage(L.img, L.x, L.y, L.w, L.h); c.restore(); }
+    this.tex.needsUpdate = true; this.dirty = false;
+  }
+  addImage(img, name, opts = {}) {
+    const W = this.out.width, H = this.out.height, ar = img.width / img.height;
+    let w, h, x = opts.x ?? 0, y = 0;
+    if (opts.fill) { w = W; h = H; } else if (opts.cell) { ({ x, y, w, h } = opts.cell); } else { h = H; w = h * ar; }
+    const L = { img, name, x, y, w, h, linked: opts.linked || null };
+    if (opts.linked) { const i = this.layers.findIndex(l => l.linked === opts.linked); if (i >= 0) { const o = this.layers[i]; L.x = o.x; L.y = o.y; L.w = o.w; L.h = o.h; if (opts.fill) { L.x = 0; L.y = 0; L.w = W; L.h = H; } this.layers[i] = L; this.sel = i; this.changed(); return L; } }
+    this.layers.push(L); this.sel = this.layers.length - 1; this.changed(); return L;
+  }
+  changed() { this.dirty = true; scheduleApply(this); drawBoard(); updateButtons(); }
+}
+const wallGuides = (b, c, s) => {                        // panel joints (every bay) and rows, like the templates; transparent rows shaded
+  const N = Math.round(b.wM / WL.bay_m), gl = Number($('wallGlass').value) || 0;
+  if (gl) { c.fillStyle = 'rgba(120,200,255,.18)'; c.fillRect(0, 0, b.out.width * s, gl * WL.row_h * PXM * s); }
+  c.strokeStyle = 'rgba(255,0,255,.55)'; c.lineWidth = 1;
+  for (let i = 0; i <= N; i++) { const x = i * WL.bay_m * PXM * s; c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, b.out.height * s); c.stroke(); }
+  for (let r = 0; r <= WL.rows; r++) { const y = r * WL.row_h * PXM * s; c.beginPath(); c.moveTo(0, y + .5); c.lineTo(b.out.width * s, y + .5); c.stroke(); }
+};
+const wallCell = (b, x, y) => { const cw = WL.bay_m * PXM, ch = WL.row_h * PXM; return { x: Math.floor(x / cw) * cw, y: Math.floor(y / ch) * ch, w: cw, h: ch }; };
+const fenceGuides = (b, c, s) => { c.strokeStyle = 'rgba(255,0,255,.45)'; for (let x = 0; x <= b.wM + 1e-6; x += 2) { const X = x * PXM * s; c.beginPath(); c.moveTo(X + .5, 0); c.lineTo(X + .5, b.out.height * s); c.stroke(); } };
+const fenceCell = (b, x) => { const cw = 2 * PXM; return { x: Math.floor(x / cw) * cw, y: 0, w: cw, h: b.out.height }; };
+const bandGuides = (b, c, s) => {
+  const W = b.out.width * s, H = b.out.height * s, [m0, m1] = BAND;
+  c.font = '11px sans-serif'; c.fillStyle = 'rgba(255,255,255,.85)'; c.strokeStyle = 'rgba(255,0,255,.6)';
+  for (let k = Math.ceil(m0 / 1000); k * 1000 <= m1; k++) { const x = (k * 1000 - m0) / (m1 - m0) * W; c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, H); c.stroke(); c.fillText(k + 'K', x + 3, 12); }
+  c.fillStyle = 'rgba(93,155,224,.25)';
+  for (const B of BRG) c.fillRect((B.s0 - m0) / (m1 - m0) * W, 0, B.L / (m1 - m0) * W, H);
+  c.strokeStyle = 'rgba(255,255,255,.7)';
+  for (const t of PIER_T.sb) { const x = t * W; c.beginPath(); c.moveTo(x + .5, H - 10); c.lineTo(x + .5, H); c.stroke(); }
+  for (const t of PIER_T.nb) { const x = t * W; c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, 8); c.stroke(); }
+};
+BOARDS.fence = new Board('fence', '施工圍籬', 20, 2.4, { guides: fenceGuides, cellOf: fenceCell, file: '施工圍籬.png' });
+// one wall canvas for both sides (2026-10-27 使用者：只模擬南下，南下北上合併)
+BOARDS.wall = new Board('wall', '隔音牆', 60, RW, { guides: wallGuides, cellOf: wallCell, file: '隔音牆.png' });
+BOARDS.band = new Board('band', '鋼構橋・沿線色帶', 1, 1, { guides: bandGuides, file: '鋼構橋_沿線色帶.png', tex: BAND_TEX, transparent: true });
+BOARDS.band.setSize(BAND[1] - BAND[0], 1, 1200, 48);
+fenceMat.uniforms.tFence.value = BOARDS.fence.tex;
+const BRTAB = { key: 'bridge', label: '鋼構橋', layers: [], sel: -1, bg: '#ffffff' };
+
+// ---- apply boards to the 3D scene ----
+const pending = new Set();
+function scheduleApply(b) { pending.add(b); }            // always live
+function applyBoard(b) {
+  b.render();
+  if (b.key === 'band') { updateBand(); applyShape(); }
+  if (b.key.startsWith('wall')) rebindWalls();
+}
+function rebindWalls() { for (const w of WMATS) w.mat.uniforms.tDesign.value = BOARDS.wall.tex; }
+{ // 牆高 (rows of 0.5 m) and 透明板 options
+  let h = ''; for (let r = 4; r <= 10; r++) h += `<option value="${r}">${(r * WL.row_h).toFixed(1)} m</option>`; $('wallRows').innerHTML = h; $('wallRows').value = WL.rows;
+  const g = () => { const v = $('wallGlass').value; let o = '<option value="0">無</option>'; for (let r = 1; r < WL.rows; r++) o += `<option value="${r}">上 ${r} 排</option>`; $('wallGlass').innerHTML = o; $('wallGlass').value = Math.min(Number(v) || 0, WL.rows - 1); };
+  g(); $('wallRows').addEventListener('change', () => { WL.rows = Number($('wallRows').value); RW = WL.rows * WL.row_h; g(); wallSettings(true); });
+}
+function wallSettings(rebuild) {
+  const N = Math.max(1, Math.round(Number($('wallN').value) || 30)), W = N * WL.bay_m, mode = $('mode').value === '板塊' ? 1 : 0;
+  const bw = BOARDS.wall; if (Math.abs(bw.wM - W) > 1e-6 || Math.abs(bw.hM - RW) > 1e-6) { bw.setSize(W, RW); bw.changed(); applyBoard(bw); }
+  if (rebuild) buildWalls();
+  for (const { mat } of WMATS) { const U = mat.uniforms; U.uW.value = W; U.uNu.value = N; U.uMode.value = mode; U.uTex.value = Number($('wallTex').value) || 0; U.uRowH.value = WL.row_h; }
+  $('wallWv').textContent = '＝ ' + W + ' m';
+  rebindWalls(); drawBoard(); updateStats();
+}
+function fenceSettings() {
+  const W = Math.max(2, Number($('fenceW').value) || 20);
+  if (Math.abs(BOARDS.fence.wM - W) > 1e-6) { BOARDS.fence.setSize(W, 2.4); BOARDS.fence.changed(); applyBoard(BOARDS.fence); }
+  fenceMat.uniforms.uFW.value = W; drawBoard();
+}
+$('wallN').addEventListener('input', () => wallSettings()); $('mode').addEventListener('change', () => wallSettings());
+for (const id of ['wallGlass', 'wallStep']) $(id).addEventListener('change', () => wallSettings(true));
+$('wallTex').addEventListener('change', () => wallSettings());
+$('fenceW').addEventListener('input', fenceSettings);
+
+// ---- bridge face colours + band ----
+const FACE_N = ['北', '南', '東', '西', '頂', '底'];
+const PART = { '橋墩': pierMat, '箱梁': girderMat };
+const DEF = { '橋墩': ['#3C7DA0', '#C8965A', '#76808A', '#76808A', '#6C7076', '#6C7076'], '箱梁': ['#A0ACB4', '#A0ACB4', '#8CA0B2', '#8CA0B2', '#969BA0', '#ACB0B2'] };
+{
+  const F = $('faces'); let h = '';
+  for (const part of Object.keys(PART)) {
+    h += '<span class="fpart">' + part + '</span>';
+    for (let f = 0; f < 6; f++) h += '<span class="face" title="' + part + '・' + FACE_N[f] + '面（以南下往南為準）；勾選＝改用下方畫布的沿線色帶">' + FACE_N[f] +
+      '<input type="color" data-part="' + part + '" data-f="' + f + '"><input type="checkbox" data-bpart="' + part + '" data-f="' + f + '"></span>';
+  }
+  F.innerHTML = h;
+  F.addEventListener('input', e => {
+    const t = e.target, f = Number(t.dataset.f);
+    if (t.dataset.part) PART[t.dataset.part].uniforms.cF.value[f].set(t.value);
+    if (t.dataset.bpart) updateBand();
+  });
+}
+function setBridge(rows, label) {
+  for (const part of Object.keys(PART)) for (let f = 0; f < 6; f++) {
+    const v = String(((rows || {})[part] || [])[f] || '').trim(); const hex = /^#?[0-9a-fA-F]{6}$/.test(v) ? (v[0] === '#' ? v : '#' + v) : DEF[part][f];
+    document.querySelector(`input[data-part="${part}"][data-f="${f}"]`).value = hex.toLowerCase(); PART[part].uniforms.cF.value[f].set(hex);
+  }
+  $('bridgeInfo').textContent = '☑＝這一面改用沿線色帶'; $('bridgeInfo').title = '顏色來源：' + label + '；沿線色帶＝把漸層圖拖進下方畫布，左＝起點、右＝終點（' + (BAND[1] / 1000).toFixed(1) + 'K）；北南東西以南下往南為準';
+  $('cPier').value = '#' + pierMat.uniforms.cF.value[0].getHexString(); $('cGird').value = '#' + girderMat.uniforms.cF.value[2].getHexString();
+}
+// simple colours: 橋墩 / 箱梁 set every face of that part (per-face colours stay available under 進階)
+for (const [id, part] of [['cPier', '橋墩'], ['cGird', '箱梁']]) $(id).addEventListener('input', () => {
+  for (let f = 0; f < 6; f++) { PART[part].uniforms.cF.value[f].set($(id).value); document.querySelector(`input[data-part="${part}"][data-f="${f}"]`).value = $(id).value; }
+  if (active === BRTAB) drawBoard();
+});
+function updateBand() {
+  const has = BOARDS.band.layers.length > 0;
+  for (const part of Object.keys(PART)) for (let f = 0; f < 6; f++)
+    PART[part].uniforms.uBand.value[f] = has && document.querySelector(`input[data-bpart="${part}"][data-f="${f}"]`).checked ? 1 : 0;
+}
+
+// ---- 鋼構橋・橋墩造型 (2026-10-27 使用者：調整方式看不懂，要更好用): drawn large on the canvas, boundary dragged by its handles ----
+// 每座一樣 = one pier; 漸變 = 第一座 / 最後一座 of each bridge (in that line's driving direction), the piers between blend;
+// 依彎道 = 直線處 / 最彎處 (blend by the curvature at the pier). slope / curve: boundary z(x) = hL + (hR − hL)·x^p across the
+// column, x = 0 road side (left, as that line's drivers meet the pier) .. 1 outer side; band: stripes (lowest centre, width, count,
+// spacing). The split is a cut through the whole column, so the road-side face shows a level line at hL.
+const SH = { type: 'slope', mode: 'ramp', hL: [3.6, 3.6], hR: [4.6, 8.6], p: [1.8, 1.8], bh: [5.0, 5.0], bw: [0.4, 0.4], bn: [1, 4], bg: [0.8, 0.8] };
+const SH_KEYS = ['hL', 'hR', 'p', 'bh', 'bw', 'bn', 'bg'];
+const pierW = Pi => SH.mode === 'ramp' ? (Pi.n > 1 ? Pi.k / (Pi.n - 1) : 0) : SH.mode === 'curve' ? Math.min(1, Pi.kap / KMAX) : 0;
+const lerp2 = (r, w) => r[0] + (r[1] - r[0]) * w;
+function shapeAt(w) {                                     // shader parameters at blend w (0 = first editor pier, 1 = second)
+  if (SH.type === 'band') return [lerp2(SH.bh, w), Math.max(0.05, lerp2(SH.bw, w)), Math.round(lerp2(SH.bn, w)), lerp2(SH.bg, w)];
+  return [lerp2(SH.hL, w), lerp2(SH.hR, w), SH.type === 'curve' ? Math.exp(lerp2(SH.p.map(Math.log), w)) : 1, 0];
+}
+const accBand = () => $('pAccBand').checked && BOARDS.band.layers.length > 0;
+function applyShape() {
+  const U = pierMat.uniforms;
+  U.uShape.value = SH.type === 'none' ? 0 : SH.type === 'band' ? 2 : 1; U.uLowOuter.value = 0;
+  U.cAcc.value.set($('cAcc').value); U.uAccBand.value = accBand() ? 1 : 0;
+  const A = pierGeo.attributes.aShp;
+  for (const Pi of PIERS) { const v = shapeAt(pierW(Pi)); for (let i = Pi.v0; i < Pi.v1; i++) A.array.set(v, i * 4); }
+  A.needsUpdate = true;
+  for (const [id, key] of [['bType', 'type'], ['bMode', 'mode']]) $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === SH[key]));
+  if (typeof active !== 'undefined' && active === BRTAB) drawBoard();
+}
+for (const [id, key] of [['bType', 'type'], ['bMode', 'mode']]) $(id).addEventListener('click', e => {
+  const v = e.target.dataset.v; if (!v) return; SH[key] = v;
+  if (key === 'mode' && v === 'fixed') for (const k of SH_KEYS) SH[k][1] = SH[k][0];   // one pier: both ends equal
+  applyShape();
+});
+$('cAcc').addEventListener('input', applyShape); $('pAccBand').addEventListener('change', applyShape);
+$('bView').innerHTML = BRG.map(B => [1, -1].map(sg => `<option value="${B.b},${sg}">右邊顯示：${B.name}・${sg > 0 ? '南下側' : '北上側'}</option>`).join('')).join('');
+$('bView').addEventListener('change', () => drawBoard());
+$('bAdv').onclick = () => setActive('band'); $('bBack').onclick = () => setActive('bridge');
+
+// ---- board editor (one visible canvas, the active board) ----
+const cv = $('boardCv'), stage = $('stage');
+let active = BOARDS.wall, scale = 1, drag = null, showGuides = true;
+const HINT = {
+  board: '把圖片拖進畫布，或點一格再 Ctrl+V 貼上；拖曳移動、拖角落縮放、滾輪縮放、Delete 刪除。在模擬畫面點牆或圍籬，也會選到對應的格子。圖面左邊＝行車前方。',
+  band: '拖入一張漸層圖：勾選的面依橋墩所在位置取色（左＝起點、右＝終點；藍底＝鋼構橋路段）。',
+  bridge: '拖曳圓點調整色塊；選「漸變」時調第一座和最後一座，中間的橋墩自動漸變。斜線區＝從車道看會被施工圍籬擋住的高度。右邊是整座橋，點橋墩可把鏡頭移過去。' };
+function boardScale() {                                 // fit the stage; very wide boards stay >= 100 px tall and scroll sideways
+  const b = active, aw = stage.offsetWidth - 22, ah = Math.max(40, stage.offsetHeight - 16 - 14);
+  const minH = Math.min(ah, b.key === 'band' ? 48 : 100);
+  const base = Math.min(ah / b.out.height, Math.max(aw / b.out.width, minH / b.out.height));
+  const z = Number($('bZoom').value) / 100; return base * Math.pow(6, z);
+}
+function drawBoard() {
+  if (active === BRTAB) { drawBridgeEditor(); return; }
+  const b = active; if (b.dirty) b.render();
+  scale = boardScale();
+  const W = Math.round(b.out.width * scale), H = Math.round(b.out.height * scale);
+  cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const c = cv.getContext('2d'); c.imageSmoothingEnabled = b.key !== 'band'; c.clearRect(0, 0, W, H);
+  if (b.transparent && !b.layers.length) { c.fillStyle = 'rgba(255,255,255,.06)'; c.fillRect(0, 0, W, H); c.fillStyle = '#9aa5ab'; c.font = '13px sans-serif'; c.fillText('拖入一張漸層或色帶圖片：左＝起點、右＝終點 ' + (BAND[1] / 1000).toFixed(1) + 'K', 10, H / 2 + 5); }
+  else c.drawImage(b.out, 0, 0, W, H);
+  if (showGuides) b.guides(b, c, scale);
+  if (b.cell) { c.strokeStyle = '#3fd0ff'; c.lineWidth = 2; c.strokeRect(b.cell.x * scale + 1, b.cell.y * scale + 1, b.cell.w * scale - 2, b.cell.h * scale - 2); }
+  const L = b.layers[b.sel];
+  if (L) {
+    c.strokeStyle = '#f29a2e'; c.lineWidth = 2; c.setLineDash([6, 4]); c.strokeRect(L.x * scale, L.y * scale, L.w * scale, L.h * scale); c.setLineDash([]);
+    c.fillStyle = '#f29a2e'; for (const [hx, hy] of corners(L)) c.fillRect(hx * scale - 5, hy * scale - 5, 10, 10);
+  }
+  $('bSize').textContent = b.label + '：' + (b.key === 'band' ? '沿線 ' + (b.wM / 1000).toFixed(1) + ' km' : b.wM + ' m × ' + b.hM + ' m') + '，' + b.out.width + '×' + b.out.height + ' px' + (b.cell ? '　已選一格：Ctrl+V 貼上' : '') + statsOf(b.key);
+}
+const ED = { handles: [], seq: null, drag: null };       // bridge editor: hit areas of the last draw
+function drawPier(c, cx, gy, sc, colW, capW, zTop, sh, base, acc) {   // one pier front: column with the colour split, hammerhead cap
+  const x0 = cx - colW / 2, capBot = gy - (zTop - 2.2) * sc, capTop = gy - zTop * sc;
+  c.fillStyle = base; c.fillRect(x0, capBot, colW, gy - capBot);
+  if (SH.type !== 'none') {
+    c.save(); c.beginPath(); c.rect(x0, capBot, colW, gy - capBot); c.clip(); c.fillStyle = acc;
+    if (SH.type === 'band') { for (let k = 0; k < Math.round(sh[2]); k++) { const z = sh[0] + k * sh[3]; c.fillRect(x0, gy - (z + sh[1] / 2) * sc, colW, sh[1] * sc); } }
+    else { c.beginPath(); c.moveTo(x0, gy); for (let j = 0; j <= 32; j++) { const xx = j / 32; c.lineTo(x0 + xx * colW, gy - (sh[0] + (sh[1] - sh[0]) * Math.pow(xx, sh[2])) * sc); } c.lineTo(x0 + colW, gy); c.closePath(); c.fill(); }
+    c.restore();
+  }
+  c.fillStyle = base; c.beginPath();
+  for (const [u, h] of [[-0.5, 0], [0.5, 0], [0.5, -0.45], [0.18, -1], [-0.18, -1], [-0.5, -0.45]]) c.lineTo(cx + u * capW, capTop - h * 2.2 * sc);
+  c.closePath(); c.fill(); c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 1; c.stroke(); c.strokeRect(x0 + .5, capBot + .5, colW - 1, gy - capBot - 1);
+}
+function drawBridgeEditor() {
+  const [bi, sg] = $('bView').value.split(',').map(Number), list = PIERS.filter(p => p.b === bi && p.sg === sg).sort((p, q) => p.k - q.k);
+  const H = Math.max(150, stage.clientHeight - 18), gy = H - 34, ZT = Math.max(...PIERS.map(p => p.zTop)), sc = (gy - 30) / ZT;
+  const yOf = z => gy - z * sc, nEd = SH.mode === 'fixed' ? 1 : 2, M = 78;
+  const colW = Math.max(40, Math.min(110, (ZT - 2.2) * sc * 0.42)), slot = Math.max(colW * 2.4, 170);   // columns drawn ~1.6x wider than true
+  const face = sg > 0 ? 0 : 1, U = pierMat.uniforms, base = '#' + U.cF.value[face].getHexString(), acc = $('cAcc').value;
+  const seqX = M + nEd * slot + 30, pitch = 26, W = Math.max(stage.clientWidth - 22, seqX + list.length * pitch + 30);
+  cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  const c = cv.getContext('2d'); c.fillStyle = '#1b1f22'; c.fillRect(0, 0, W, H);
+  c.font = '12px "Microsoft JhengHei", sans-serif'; c.textBaseline = 'middle';
+  // height scale and the zone hidden behind the construction fence (sight line from the driver's eye over the fence top to the pier line)
+  const hide = 1.42 + (2.52 - 1.42) * (VIA.yc - (Y_IN + 1.5 * LANE)) / (Y_LINE - (Y_IN + 1.5 * LANE));
+  c.fillStyle = '#7d878c'; c.textAlign = 'right';
+  for (let z = 0; z <= ZT; z += 3) { c.fillRect(M - 8, yOf(z), 6, 1); c.fillText(z + ' m', M - 11, yOf(z)); }
+  c.save(); c.beginPath(); c.rect(M - 2, yOf(hide), seqX - M - 18, gy - yOf(hide)); c.clip(); c.strokeStyle = 'rgba(255,255,255,.09)'; c.lineWidth = 6;
+  for (let x = M - 80; x < seqX + 100; x += 14) { c.beginPath(); c.moveTo(x, gy + 10); c.lineTo(x + 60, yOf(hide) - 10); c.stroke(); } c.restore();
+  c.fillStyle = '#c3ccd1'; c.textAlign = 'left'; c.font = '11px "Microsoft JhengHei", sans-serif';
+  c.fillText('圍籬遮擋', 6, yOf(hide * 0.5)); c.font = '12px "Microsoft JhengHei", sans-serif';
+  c.strokeStyle = '#596166'; c.beginPath(); c.moveTo(M - 4, gy + .5); c.lineTo(W, gy + .5); c.stroke();
+  ED.handles = []; ED.yOf = yOf; ED.sc = sc; ED.gy = gy;
+  const names = SH.mode === 'ramp' ? ['第一座', '最後一座'] : SH.mode === 'curve' ? ['直線處', '最彎處'] : ['每一座'];
+  for (let i = 0; i < nEd; i++) {
+    const cx = M + slot * (i + 0.5), x0 = cx - colW / 2, zTop = Math.max(...list.map(p => p.zTop)), sh = shapeAt(i);   // a full-height pier (the ends of a bridge sit low on the ramps)
+    drawPier(c, cx, gy, sc, colW, colW * 2.3, zTop, sh, base, acc);
+    c.fillStyle = '#e8ecee'; c.textAlign = 'center'; c.fillText(names[i], cx, 12);
+    const zMax = zTop - 2.2, hd = (kind, x, z) => ED.handles.push({ kind, ed: i, x, y: yOf(z), zMax, x0, colW });
+    if (SH.type === 'slope' || SH.type === 'curve') {
+      hd('hL', x0, sh[0]); hd('hR', x0 + colW, sh[1]);
+      if (SH.type === 'curve') hd('p', cx, sh[0] + (sh[1] - sh[0]) * Math.pow(0.5, sh[2]));
+      c.fillStyle = '#9aa5ab'; c.fillText(`道路側 ${sh[0].toFixed(1)} m　外側 ${sh[1].toFixed(1)} m`, cx, gy + 14);
+    } else if (SH.type === 'band') {
+      hd('bh', cx, sh[0]); hd('bw', x0 + colW + 10, sh[0] + sh[1] / 2); if (sh[2] > 1) hd('bg', cx, sh[0] + sh[3]);
+      ED.handles.push({ kind: 'bn-', ed: i, x: x0 - 16, y: gy + 14, btn: true }, { kind: 'bn+', ed: i, x: x0 + colW + 16, y: gy + 14, btn: true });
+      c.fillStyle = '#9aa5ab'; c.fillText(`${sh[2]} 條　高 ${sh[0].toFixed(1)} m`, cx, gy + 14);
+      for (const [t, x] of [['−', x0 - 16], ['＋', x0 + colW + 16]]) { c.fillStyle = '#2c3236'; c.fillRect(x - 10, gy + 5, 20, 18); c.fillStyle = '#e8ecee'; c.fillText(t, x, gy + 14); }
+    } else { c.fillStyle = '#9aa5ab'; c.fillText('不分色（只用橋墩顏色）', cx, gy + 14); }
+    if (i === 0 && nEd === 2) { c.fillStyle = '#7d878c'; c.fillText('→ 漸變 →', M + slot, yOf(ZT * 0.45)); }
+  }
+  for (const h of ED.handles) if (!h.btn) { c.beginPath(); c.arc(h.x, h.y, 7, 0, 7); c.fillStyle = ED.drag === h.kind + h.ed ? '#ffd27a' : '#f29a2e'; c.fill(); c.strokeStyle = '#1b1f22'; c.lineWidth = 2; c.stroke(); }
+  // the whole bridge, as that line's drivers meet the piers
+  c.fillStyle = '#9aa5ab'; c.textAlign = 'left'; c.fillText(`${BRG[bi].name}・${sg > 0 ? '南下側' : '北上側'}：共 ${list.length} 座（點橋墩可把鏡頭移過去）`, seqX, 12);
+  list.forEach((Pi, i) => { const cx = seqX + pitch * (i + 0.5); drawPier(c, cx, gy, sc, pitch * 0.45, pitch * 0.95, Pi.zTop, shapeAt(pierW(Pi)), base, acc);
+    if (i % 5 === 0 || i === list.length - 1) { c.fillStyle = '#7d878c'; c.textAlign = 'center'; c.fillText(String(i + 1), cx, gy + 14); } });
+  ED.seq = { x0: seqX, pitch, list };
+  $('bSize').textContent = '鋼構橋：這座 ' + list.length + ' 座｜全線 ' + PIERS.length + ' 座';
+}
+function edDown(e) {
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const h = ED.handles.find(h => Math.hypot(h.x - x, h.y - y) < (h.btn ? 12 : 11));
+  if (h && h.btn) { const k = h.ed, n = Math.max(1, Math.min(10, SH.bn[k] + (h.kind === 'bn+' ? 1 : -1))); SH.bn[k] = n; if (SH.mode === 'fixed') SH.bn[1] = n; applyShape(); return; }
+  if (h) { ED.drag = h.kind + h.ed; ED.h = h; cv.setPointerCapture(e.pointerId); drawBoard(); return; }
+  const S = ED.seq; if (S && x > S.x0) { const i = Math.floor((x - S.x0) / S.pitch); if (S.list[i]) gotoMil(S.list[i].m - 160); }
+}
+function edMove(e) {
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (!ED.drag) { cv.style.cursor = ED.handles.some(h => Math.hypot(h.x - x, h.y - y) < 11) ? 'grab' : (ED.seq && x > ED.seq.x0 ? 'pointer' : 'default'); return; }
+  const h = ED.h, k = h.ed, z = Math.max(0, Math.min(h.zMax, (ED.gy - y) / ED.sc)), r1 = v => Math.round(v * 10) / 10, set = (key, v) => { SH[key][k] = v; if (SH.mode === 'fixed') SH[key][1] = v; };
+  if (h.kind === 'hL' || h.kind === 'hR') set(h.kind, r1(z));
+  else if (h.kind === 'p') { const a = SH.hL[k], b = SH.hR[k]; if (Math.abs(b - a) > 0.2) set('p', Math.max(0.25, Math.min(5, Math.log(Math.max(0.03, Math.min(0.97, (z - a) / (b - a)))) / Math.log(0.5)))); }
+  else if (h.kind === 'bh') set('bh', r1(z));
+  else if (h.kind === 'bw') set('bw', Math.max(0.1, r1((z - SH.bh[k]) * 2)));
+  else if (h.kind === 'bg') set('bg', Math.max(SH.bw[k] + 0.1, r1(z - SH.bh[k])));
+  applyShape();
+}
+const corners = L => [[L.x, L.y], [L.x + L.w, L.y], [L.x + L.w, L.y + L.h], [L.x, L.y + L.h]];
+function updateButtons() {
+  const has = active.sel >= 0 && active.layers[active.sel];
+  $('layerOps').style.display = has ? '' : 'none';         // layer buttons only while a layer is selected
+  $('bUp').disabled = !has || active.sel >= active.layers.length - 1; $('bDown').disabled = !has || active.sel <= 0;
+  $('bBg').value = active.bg;
+  document.querySelectorAll('.tabs button').forEach(t => t.classList.toggle('on', t.dataset.tab === (active.key === 'band' ? 'bridge' : active.key)));
+}
+function setActive(key) {
+  active = key === 'bridge' ? BRTAB : BOARDS[key]; document.querySelectorAll('.pset').forEach(p => { p.hidden = !p.dataset.for.split(' ').includes(key); });
+  $('bHint').textContent = HINT[key in HINT ? key : 'board'];
+  drawBoard(); updateButtons();
+}
+document.querySelectorAll('[data-tab]').forEach(t => t.onclick = () => setActive(t.dataset.tab));
+const toBoard = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale]; };
+function hit(x, y) { for (let i = active.layers.length - 1; i >= 0; i--) { const L = active.layers[i]; if (x >= L.x && x <= L.x + L.w && y >= L.y && y <= L.y + L.h) return i; } return -1; }
+cv.addEventListener('pointerdown', e => {
+  if (active === BRTAB) { edDown(e); return; }
+  const [x, y] = toBoard(e), L = active.layers[active.sel];
+  if (L) { const ci = corners(L).findIndex(([hx, hy]) => Math.abs(hx - x) * scale < 9 && Math.abs(hy - y) * scale < 9);
+    if (ci >= 0) { drag = { mode: 'scale', ci, L, ox: L.x, oy: L.y, ow: L.w, oh: L.h }; cv.setPointerCapture(e.pointerId); return; } }
+  const i = hit(x, y); active.sel = i;
+  active.cell = active.cellOf && x >= 0 && y >= 0 && x < active.out.width && y < active.out.height ? active.cellOf(active, x, y) : null;
+  if (i >= 0) { const L2 = active.layers[i]; drag = { mode: 'move', L: L2, dx: x - L2.x, dy: y - L2.y }; cv.setPointerCapture(e.pointerId); }
+  drawBoard(); updateButtons();
+});
+cv.addEventListener('pointermove', e => {
+  if (active === BRTAB) { edMove(e); return; }
+  const [x, y] = toBoard(e);
+  if (!drag) { const L = active.layers[active.sel]; const onC = L && corners(L).some(([hx, hy]) => Math.abs(hx - x) * scale < 9 && Math.abs(hy - y) * scale < 9);
+    cv.style.cursor = onC ? 'nwse-resize' : (hit(x, y) >= 0 ? 'move' : 'default'); return; }
+  const L = drag.L;
+  if (drag.mode === 'move') { L.x = x - drag.dx; L.y = y - drag.dy; }
+  else {
+    const ax = drag.ci === 0 || drag.ci === 3 ? drag.ox + drag.ow : drag.ox, ay = drag.ci <= 1 ? drag.oy + drag.oh : drag.oy;
+    let w = Math.max(4, Math.abs(x - ax)), h = Math.max(4, Math.abs(y - ay));
+    if (!e.shiftKey) { const ar = drag.ow / drag.oh; if (w / h > ar) h = w / ar; else w = h * ar; }
+    L.w = w; L.h = h; L.x = x < ax ? ax - w : ax; L.y = y < ay ? ay - h : ay;
+  }
+  active.cell = null; active.changed();
+});
+cv.addEventListener('pointerup', () => { drag = null; if (ED.drag) { ED.drag = null; drawBoard(); } });
+cv.addEventListener('wheel', e => {
+  if (active === BRTAB) return;
+  const [x, y] = toBoard(e), i = hit(x, y); if (i < 0) return; e.preventDefault();
+  const L = active.layers[i], f = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+  L.x = x - (x - L.x) * f; L.y = y - (y - L.y) * f; L.w *= f; L.h *= f; active.sel = i; active.changed();
+}, { passive: false });
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && active.layers[active.sel]) { active.layers.splice(active.sel, 1); active.sel = -1; active.changed(); }
+});
+const selL = () => active.layers[active.sel];
+$('bFill').onclick = () => { const L = selL(); Object.assign(L, { x: 0, y: 0, w: active.out.width, h: active.out.height }); active.changed(); };
+const swapLayer = d => { const i = active.sel, j = i + d, A = active.layers; if (j < 0 || j >= A.length) return; [A[i], A[j]] = [A[j], A[i]]; active.sel = j; active.changed(); };
+$('bUp').onclick = () => swapLayer(1); $('bDown').onclick = () => swapLayer(-1);
+$('bDup').onclick = () => { const L = selL(); const c = Object.assign({}, L, { x: L.x + L.w, linked: null }); active.layers.push(c); active.sel = active.layers.length - 1; active.changed(); };
+$('bDel').onclick = () => { active.layers.splice(active.sel, 1); active.sel = -1; active.changed(); };
+$('bBg').oninput = () => { active.bg = $('bBg').value; active.changed(); };
+$('bGuides').onchange = () => { showGuides = $('bGuides').checked; drawBoard(); };
+$('bZoom').oninput = drawBoard;
+function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
+stage.addEventListener('dragover', e => e.preventDefault());
+stage.addEventListener('drop', async e => {
+  e.preventDefault(); if (active === BRTAB) return; const [x] = toBoard(e);
+  for (const f of e.dataTransfer.files) if (f.type.startsWith('image/')) active.addImage(await loadImg(URL.createObjectURL(f)), f.name, { x: Math.max(0, x) });
+});
+window.addEventListener('paste', async e => {                // Ctrl+V: an image from the clipboard goes into the selected cell (or fills the height)
+  if (active === BRTAB || e.target.tagName === 'INPUT') return;
+  const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/')); if (!it) return;
+  e.preventDefault(); const img = await loadImg(URL.createObjectURL(it.getAsFile()));
+  active.addImage(img, '貼上的圖片', active.cell ? { cell: active.cell } : {});
+});
+window.addEventListener('resize', drawBoard); new ResizeObserver(() => drawBoard()).observe(stage);
+
+// ================= scheme files: folder / files / drop on the 3D view, watched (Chrome / Edge) =================
+function slotOf(name) {
+  if (/(隔音牆|南下_車道側)\.png$/i.test(name)) return 'wall';
+  if (/施工圍籬\.png$/i.test(name)) return 'fence'; if (/方案設定\.xlsx$/i.test(name)) return 'xlsx'; return null;
+}
+const stamp = () => new Date().toLocaleTimeString('zh-TW', { hour12: false });
+function setSlot(slot, state, tip) {                     // chip in the bar: ✓ loaded / ⚠ problem / — none; details on hover
+  const e = $('s_' + slot); e.textContent = state === 'ok' ? '✓' : state === 'warn' ? '⚠' : '—'; e.className = state === 'none' ? '' : state; e.parentNode.title = tip || '';
+}
+async function setFileImage(slot, src, label) {
+  const img = await loadImg(src), b = BOARDS[slot];
+  b.addImage(img, label, { fill: true, linked: 'file' }); applyBoard(b);
+  const want = b.out.width / b.out.height, got = img.width / img.height, bad = Math.abs(got / want - 1) > 0.02;
+  setSlot(slot, bad ? 'warn' : 'ok', label + '（' + img.width + '×' + img.height + ' px）' + (bad ? '\n長寬比 ' + got.toFixed(2) + '，畫布為 ' + want.toFixed(2) + '（已拉伸）' : ''));
+}
+let XLSX = null;
+async function loadXlsx(file) {
+  try {
+    if (!XLSX) XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/xlsx.mjs');
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const rows = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: null }) : [];
+    const basic = {}; rows('基本').slice(1).forEach(r => { if (r[0]) basic[r[0]] = r[1]; });
+    if (basic['單元寬度_m']) $('wallN').value = Math.max(1, Math.round(Number(basic['單元寬度_m']) / WL.bay_m));
+    if (basic['上色模式']) $('mode').value = String(basic['上色模式']).trim() === '自由' ? '自由' : '板塊';
+    if (basic['施工圍籬單元寬度_m']) $('fenceW').value = basic['施工圍籬單元寬度_m'];
+    const br = {}; rows('鋼構橋').slice(1).forEach(r => { if (r[0]) br[String(r[0]).trim()] = r.slice(1, 7); });
+    setBridge(br, file.name); wallSettings(); fenceSettings();
+    setSlot('xlsx', 'ok', file.name + '　' + stamp());
+  } catch (e) { setSlot('xlsx', 'warn', '讀取失敗：' + e.message); }
+}
+const watched = {};
+async function loadFromFile(file, slot) {
+  slot = slot || slotOf(file.name); if (!slot) return false;
+  if (slot === 'xlsx') await loadXlsx(file); else await setFileImage(slot, URL.createObjectURL(file), file.name + '　' + stamp());
+  if (watched[slot]) watched[slot].lastMod = file.lastModified;
+  return true;
+}
+async function watchHandle(h) { const slot = slotOf(h.name); if (!slot) return; const f = await h.getFile(); watched[slot] = { handle: h, lastMod: f.lastModified }; await loadFromFile(f, slot); }
+let dirHandle = null;
+setInterval(async () => {
+  if (dirHandle) { try { for await (const [name, h] of dirHandle.entries()) { const slot = slotOf(name); if (h.kind === 'file' && slot && !watched[slot]) await watchHandle(h); } } catch (e) {} }
+  for (const [slot, w] of Object.entries(watched)) {
+    try { const f = await w.handle.getFile(); if (f.lastModified !== w.lastMod) { w.lastMod = f.lastModified; await loadFromFile(f, slot); } } catch (e) {}
+  }
+}, 1000);
+const live = () => { $('watchStatus').innerHTML = '<span class="ok" title="同名 PNG 或 Excel 存檔後 1 秒內更新">自動更新中</span>'; };
+$('pickDir').onclick = async () => {
+  if (!window.showDirectoryPicker) { $('watchStatus').innerHTML = '<span class="warn">請用 Chrome 或 Edge</span>'; return; }
+  try { dirHandle = await window.showDirectoryPicker(); for (const k of Object.keys(watched)) delete watched[k];
+    for await (const [name, h] of dirHandle.entries()) if (h.kind === 'file' && slotOf(name)) await watchHandle(h);
+    live(); } catch (e) {}
+};
+$('pickFiles').onclick = async () => {
+  if (window.showOpenFilePicker) {
+    try { const hs = await window.showOpenFilePicker({ multiple: true, types: [{ description: '方案檔案', accept: { 'image/png': ['.png'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+      for (const h of hs) await watchHandle(h); live(); } catch (e) {}
+  } else $('fileIn').click();
+};
+$('fileIn').onchange = async e => { for (const f of e.target.files) await loadFromFile(f); };
+pane.addEventListener('dragover', e => { e.preventDefault(); $('drop').style.display = 'flex'; });
+pane.addEventListener('dragleave', () => { $('drop').style.display = 'none'; });
+pane.addEventListener('drop', async e => {
+  e.preventDefault(); $('drop').style.display = 'none';
+  const items = [...(e.dataTransfer.items || [])], files = [...e.dataTransfer.files];
+  const hs = await Promise.all(items.map(it => it.getAsFileSystemHandle ? it.getAsFileSystemHandle().catch(() => null) : Promise.resolve(null)));
+  let any = false;
+  for (let i = 0; i < files.length; i++) {
+    const h = hs[i];
+    if (h && h.kind === 'file' && slotOf(h.name)) { await watchHandle(h); any = true; }
+    else if (h && h.kind === 'directory') { dirHandle = h; for await (const [name, fh] of h.entries()) if (fh.kind === 'file' && slotOf(name)) { await watchHandle(fh); any = true; } }
+    else if (await loadFromFile(files[i])) any = true;
+  }
+  if (any) live();
+});
+
+// ================= drive, cameras, post, loop =================
+const PATH = [], MIL = [];                               // 南下 middle lane, one point per metre
+for (let m = DRIVE[0]; m <= DRIVE[1]; m++) { const F = fr(m); PATH.push(new THREE.Vector3(...P(F, Y_IN + 1.5 * LANE, F.h))); MIL.push(m); }
+const NP = PATH.length;
+const at = s => { const i = Math.max(0, Math.min(NP - 2, Math.floor(s))); return [i, Math.max(0, Math.min(1, s - i))]; };
+const pointAt = s => { const [i, t] = at(s); return PATH[i].clone().lerp(PATH[i + 1], t); };
+const milAt = s => { const [i, t] = at(s); return MIL[i] + (MIL[i + 1] - MIL[i]) * t; };
+let dist = 5, playing = false, free = null, look = 0, lookT = 0;   // look = temporary head turn (← →), degrees
+const gotoMil = m => { dist = Math.max(5, Math.min(NP - 31, m - DRIVE[0])); free = null; };
+const ORB = { az: -2.3, el: 0.42, r: 140 }, ELV = { fov: 4.2 };
+function pose(cam, s) {
+  if (free) { cam.position.copy(free.eye); cam.lookAt(free.target); cam.updateMatrixWorld(); return; }
+  const p = pointAt(s), q = pointAt(s + 25), f = q.clone().sub(p); f.y = 0; f.normalize();
+  const r = new THREE.Vector3().crossVectors(f, UP).normalize(), mode = $('cam').value;
+  if (mode === 'orbit') {                                 // orbit around the car: drag to turn, wheel to zoom
+    const off = new THREE.Vector3().addScaledVector(r, Math.cos(ORB.az) * Math.cos(ORB.el)).addScaledVector(f, Math.sin(ORB.az) * Math.cos(ORB.el)).addScaledVector(UP, Math.sin(ORB.el));
+    cam.position.copy(p).addScaledVector(off, ORB.r); cam.lookAt(p.clone().addScaledVector(UP, 4)); cam.updateMatrixWorld(); return;
+  }
+  if (mode === 'elev') {                                  // elevation: far away, long lens, everything in front of the wall line clipped by the near plane
+    const sd = Number($('side').value), Fm = fr(milAt(s)), D = 320, tgt = new THREE.Vector3(...P(Fm, sd * Y_LINE, Fm.h + 7.5));
+    const nrm = new THREE.Vector3(-sd * Fm.rx, 0, -sd * Fm.rz);   // from the wall toward the road
+    cam.position.copy(tgt).addScaledVector(nrm, D); cam.lookAt(tgt); cam.updateMatrixWorld(); return;
+  }
+  const eye = p.clone().addScaledVector(UP, D.cam.eye_h).addScaledVector(r, D.cam.eye_lat);
+  const v = $('view').value; const dir = q.clone().addScaledVector(UP, D.cam.eye_h).addScaledVector(r, D.cam.eye_lat).sub(eye);
+  if (v === 'up') dir.applyAxisAngle(r, THREE.MathUtils.degToRad(22)); else dir.applyAxisAngle(UP, -THREE.MathUtils.degToRad(Number(v)));
+  dir.applyAxisAngle(UP, -THREE.MathUtils.degToRad(look));
+  cam.position.copy(eye); cam.lookAt(eye.clone().add(dir)); cam.updateMatrixWorld();
+}
+function setCamMode() {
+  const m = $('cam').value; $('view').hidden = m !== 'drive'; $('side').hidden = m !== 'elev';
+  for (const c of [camera, camPrev]) { c.fov = m === 'elev' ? ELV.fov : m === 'orbit' ? 50 : D.cam.vfov; c.near = m === 'elev' ? 320 - 9 : 0.1; c.far = m === 'elev' ? 320 + 400 : 7000; c.updateProjectionMatrix(); }
+  $('viewHint').textContent = m === 'orbit' ? '拖曳旋轉・滾輪縮放' : m === 'elev' ? '滾輪縮放・位置跟著路線' : '↑↓ 車速・←→ 轉頭・空白鍵 播放';
+  $('viewTag').textContent = m === 'orbit' ? '自由視角' : m === 'elev' ? '立面檢視・' + ($('side').value === '1' ? '右側（南下側）' : '左側（北上側）') : '模擬（示意道路）';
+}
+$('cam').addEventListener('change', setCamMode); $('side').addEventListener('change', setCamMode);
+{ // drag / wheel on the 3D view (orbit + elevation); a click without dragging picks a wall / fence and selects that cell on the canvas
+  let d0 = null;
+  pane.addEventListener('pointerdown', e => { d0 = { x: e.clientX, y: e.clientY, az: ORB.az, el: ORB.el, moved: false }; pane.setPointerCapture(e.pointerId); });
+  pane.addEventListener('pointermove', e => {
+    if (!d0) return; const dx = e.clientX - d0.x, dy = e.clientY - d0.y; if (Math.abs(dx) + Math.abs(dy) > 4) d0.moved = true;
+    if ($('cam').value === 'orbit') { ORB.az = d0.az - dx * 0.008; ORB.el = Math.max(0.05, Math.min(1.45, d0.el + dy * 0.006)); }
+  });
+  pane.addEventListener('pointerup', e => { if (d0 && !d0.moved) pickAt(e); d0 = null; });
+  pane.addEventListener('wheel', e => {
+    const m = $('cam').value; if (m === 'drive') return; e.preventDefault(); const f = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+    if (m === 'orbit') ORB.r = Math.max(12, Math.min(900, ORB.r * f)); else { ELV.fov = Math.max(2, Math.min(30, ELV.fov * f)); setCamMode(); }
+  }, { passive: false });
+}
+function pickAt(e) {
+  const r = pane.getBoundingClientRect(), rc = new THREE.Raycaster();
+  rc.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2), camera);
+  const h = rc.intersectObjects(scene.children, false).find(x => x.object.name.startsWith('wall_') || x.object.name === 'fence'); if (!h) return;
+  const g = h.object.geometry, ids = [h.face.a, h.face.b, h.face.c], bw = [h.barycoord?.x ?? 1 / 3, h.barycoord?.y ?? 1 / 3, h.barycoord?.z ?? 1 / 3];
+  const att = n => ids.reduce((s, i, k) => s + g.attributes[n].getX(i) * bw[k], 0);
+  if (h.object.name === 'fence') {
+    const b = BOARDS.fence, uc = -att('aAlong') / b.wM, x = (uc - Math.floor(uc)) * b.out.width;
+    setActive('fence'); b.cell = fenceCell(b, x); drawBoard(); return;
+  }
+  const key = 'wall', b = BOARDS[key], N = Math.round(b.wM / WL.bay_m);
+  const row = Math.min(WL.rows - 1, Math.floor(att('aH') / WL.row_h)), y = (WL.rows - 1 - row) * WL.row_h * PXM;
+  let x;
+  if ($('mode').value === '板塊') { const bay = Math.round(g.attributes.aBay.getX(ids[0])); x = (N - 1 - (bay % N)) * WL.bay_m * PXM; }
+  else { const uc = -att('aAlong') / b.wM; x = (uc - Math.floor(uc)) * b.out.width; }
+  setActive(key); b.cell = wallCell(b, x, y + 1); drawBoard();
+}
+const rt = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });   // mips = soft glare
+rt.depthTexture = new THREE.DepthTexture(16, 16); rt.depthTexture.type = THREE.UnsignedIntType;
+const post = new THREE.ShaderMaterial({
+  uniforms: { tColor: { value: rt.texture }, tDepth: { value: rt.depthTexture }, uInvVP: { value: new THREE.Matrix4() }, uPrevVP: { value: new THREE.Matrix4() }, uBlur: { value: 1 }, uExp: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tColor, tDepth; uniform mat4 uInvVP, uPrevVP; uniform float uBlur, uExp; varying vec2 vUv;
+    vec3 toSRGB(vec3 c) { c = clamp(c, 0.0, 1.0); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+    void main() {
+      float z = texture2D(tDepth, vUv).x; vec3 c = vec3(0.0);
+      if (uBlur < 0.5 || z > 0.99999) { c = texture2D(tColor, vUv).rgb; }
+      else {
+        vec4 w = uInvVP * vec4(vUv * 2.0 - 1.0, z * 2.0 - 1.0, 1.0); w /= w.w;
+        vec4 pc = uPrevVP * w; vec2 vel = (pc.w > 0.0) ? (pc.xy / pc.w * 0.5 + 0.5) - vUv : vec2(0.0);
+        float L = length(vel); if (L > 0.2) vel *= 0.2 / L;
+        for (int i = 0; i < 24; i++) c += texture2D(tColor, vUv + vel * (float(i) / 23.0)).rgb;
+        c /= 24.0;
+      }
+      c *= uExp;
+      if (uExp > 1.2) {                                     // glare from blurred mip levels: bright parts bleed outward while the eye is dark-adapted
+        c += max(textureLod(tColor, vUv, 3.5).rgb * uExp - 1.2, 0.0) * 0.35 + max(textureLod(tColor, vUv, 5.5).rgb * uExp - 1.0, 0.0) * 0.6;
+      }
+      c = mix(c, vec3(1.0), clamp((max(c.r, max(c.g, c.b)) - 1.0) * 0.8, 0.0, 0.95));   // overexposed -> wash to white
+      gl_FragColor = vec4(toSRGB(c), 1.0); gl_FragDepth = z;   // depth kept for the traffic drawn on top
+    }`, depthTest: true, depthWrite: true, depthFunc: THREE.AlwaysDepth });
+renderer.toneMapping = THREE.LinearToneMapping;            // only the traffic pass (drawn to the screen) uses it: exposure follows the eye adaptation
+const postScene = new THREE.Scene(); postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post));
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+function resize() {
+  const w = pane.clientWidth, h = pane.clientHeight; renderer.setSize(w, h, false); $('nag').style.fontSize = Math.max(12, Math.round(Math.min(w * 0.042, w / 18))) + 'px';   // the whole line always fits
+  const pr = renderer.getPixelRatio(); rt.setSize(Math.floor(w * pr), Math.floor(h * pr));
+  camera.aspect = w / h; camera.updateProjectionMatrix(); camPrev.aspect = camera.aspect; camPrev.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize); new ResizeObserver(resize).observe(pane); resize();
+// light: 白天 / 傍晚 (low warm sun from the west, darker ambient, orange sky)
+const LIGHTS = {
+  day: { sun: [-0.45, 0.78, -0.43], key: [0.55, 0.55, 0.55], amb: [0.62, 0.62, 0.62], sky: 0xc9d4dc, sunC: 0xfff3e2, sunI: 1.9, hemi: 1.15 },
+  dusk: { sun: [-0.88, 0.2, 0.3], key: [0.78, 0.5, 0.3], amb: [0.3, 0.29, 0.35], sky: 0xd9a27c, sunC: 0xffb070, sunI: 1.5, hemi: 0.55 } };
+function setLight() {
+  const L = LIGHTS[$('light').value]; SUN.set(...L.sun).normalize(); sun.position.copy(SUN); sun.color.setHex(L.sunC); sun.intensity = L.sunI; hemi.intensity = L.hemi;
+  tSun.position.copy(SUN); tSun.color.setHex(L.sunC); tSun.intensity = L.sunI; tHemi.intensity = L.hemi;
+  KEY.setRGB(...L.key); AMB.setRGB(...L.amb); SKY.setHex(L.sky);
+}
+$('light').addEventListener('change', setLight);
+let shotReq = false;
+$('shot').onclick = () => { shotReq = true; };
+const togglePlay = () => { playing = !playing; $('play').textContent = playing ? '❚❚ 暫停' : '▶ 播放'; };
+$('play').onclick = togglePlay;
+const keys = {};
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space' && e.target.tagName !== 'BUTTON') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'ArrowUp' || e.code === 'ArrowDown') { e.preventDefault(); const s = $('speed'); s.value = Number(s.value) + (e.code === 'ArrowUp' ? 5 : -5); s.oninput(); }
+  if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') { e.preventDefault(); if (!keys.ArrowLeft && !keys.ArrowRight) { holdT = performance.now(); nagged = false; } keys[e.code] = true; }
+});
+window.addEventListener('keyup', e => { delete keys[e.code]; });
+window.addEventListener('blur', () => { for (const k in keys) delete keys[k]; });
+// 惡趣味 (使用者 10/27): holding ← / → for 5 s in the driver view flashes a warning twice, once per hold
+let holdT = 0, nagged = false;
+function nag(now) {
+  if (nagged || !(keys.ArrowLeft || keys.ArrowRight) || $('cam').value !== 'drive' || now - holdT < 5000) return;
+  nagged = true; const n = $('nag'); n.classList.remove('show'); void n.offsetWidth; n.classList.add('show');
+}
+$('speed').oninput = () => { $('speedV').textContent = $('speed').value + ' km/h'; };
+$('blur').onchange = () => { post.uniforms.uBlur.value = $('blur').checked ? 1 : 0; };
+const fmtMil = m => { const k = Math.floor(m / 1000); return k + 'K+' + String(Math.round(m - k * 1000)).padStart(3, '0'); };
+
+// ---- route strip (the 位置 bar): one block per section, click / drag to jump ----
+const rcv = $('route');
+const RC = { tunnel: ['#6b4a2b', '#f1dcc0'], bridge: ['#2f5f99', '#dbe9fb'], trees: ['#8a7320', '#fbefc4'], straight: ['#384044', '#9aa5ab'], curve: ['#465055', '#c3ccd1'] };
+function drawRoute(mil) {
+  const w = rcv.clientWidth, h = rcv.clientHeight; if (!w) return; const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (rcv.width !== Math.round(w * dpr) || rcv.height !== Math.round(h * dpr)) { rcv.width = Math.round(w * dpr); rcv.height = Math.round(h * dpr); }
+  const c = rcv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, h);
+  const X = m => (m - DRIVE[0]) / (DRIVE[1] - DRIVE[0]) * w, bh = h - 8;
+  c.font = '11px "Microsoft JhengHei", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  const band = (a, b, col) => { c.fillStyle = col; c.fillRect(X(a), 0, Math.max(1, X(b) - X(a)), bh); };
+  for (const g of SEG) { const x0 = X(g.s0), x1 = X(g.s1); c.fillStyle = RC[g.type][0]; c.fillRect(x0 + 0.5, 0, Math.max(1, x1 - x0 - 1), bh);
+    if (g.type === 'tunnel') { band(g.s0, g.s1, '#8a6a48'); for (const [a, b] of TUN.find(T => T.s0 === g.s0).bores) band(a, b, '#1d150e'); }   // cuts light, bores dark
+    if (g.type === 'bridge') { const L = BRG.find(B => B.s0 === g.s0).line; band(g.s0, g.s1, '#5b7ea8'); band(Math.min(L[1].mA0, L[-1].mA0), Math.max(L[1].mA1, L[-1].mA1), '#2f5f99'); }   // ramps light
+    if (g.type === 'trees') { band(g.s0 + 80, g.s1, RC.trees[0]); band(g.s0, g.s0 + 80, '#5f5730'); band(g.s0 + 46, g.s0 + 54, '#c8ced2'); }   // overpass line
+  }
+  for (const g of SEG) { const x0 = X(g.s0), x1 = X(g.s1), lab = g.tag;
+    if (lab && c.measureText(lab).width < x1 - x0 - 4) { c.fillStyle = RC[g.type][1]; c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 3; c.strokeText(lab, (x0 + x1) / 2, bh / 2 + 1); c.fillText(lab, (x0 + x1) / 2, bh / 2 + 1); } }
+  c.fillStyle = '#6d777c'; for (let k = 0; k * 1000 <= DRIVE[1]; k++) c.fillRect(Math.min(w - 1, X(k * 1000)), bh + 1, 1, 3);
+  const x = X(mil); c.fillStyle = '#ff7a2a'; c.fillRect(x - 1, 0, 2, bh); c.beginPath(); c.moveTo(x - 5, h); c.lineTo(x + 5, h); c.lineTo(x, bh); c.fill();
+}
+{ let down = false; const seek = e => { const r = rcv.getBoundingClientRect(); gotoMil(DRIVE[0] + Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (DRIVE[1] - DRIVE[0])); drawRoute(milAt(dist)); };
+  rcv.addEventListener('pointerdown', e => { down = true; rcv.setPointerCapture(e.pointerId); seek(e); });
+  rcv.addEventListener('pointermove', e => { if (down) seek(e); });
+  rcv.addEventListener('pointerup', () => { down = false; }); }
+function partAt(m) {                                       // which part of the section the car is in (for the HUD)
+  const g = segAt(m);
+  if (g.type === 'tunnel') { const T = TUN.find(t => t.s0 === g.s0); if (T.bores.some(([a, b]) => m >= a && m <= b)) return '・隧道內';
+    return m < T.p1 ? '・洞口前' : m > T.p2 ? '・洞口後' : '・露天段'; }
+  if (g.type === 'bridge') { const L = BRG.find(B => B.s0 === g.s0).line; return m < Math.min(L[1].mA0, L[-1].mA0) || m > Math.max(L[1].mA1, L[-1].mA1) ? '・引道' : ''; }
+  if (g.type === 'trees' && m < g.s0 + 70) return '・跨越橋';
+  return '';
+}
+function updateStats() { drawBoard(); }
+const statsOf = key => {                                   // whole-route totals for the tab header
+  const f1 = v => Math.round(v).toLocaleString();
+  if (key.startsWith('wall')) return `｜全線隔音牆 ${(WALL_GEOM.len / 1000).toFixed(2)} km・${f1(WALL_GEOM.area)} m²` + (WALL_GEOM.glass ? `（透明板 ${f1(WALL_GEOM.glass)} m²）` : '');
+  if (key === 'fence') return `｜全線施工圍籬 ${(FENCE_LEN / 1000).toFixed(2)} km・${f1(FENCE_LEN * 2.4)} m²`;
+  return '';
+};
+
+// demo scheme
+$('wallN').value = Math.max(1, Math.round(D.demo.W / WL.bay_m)); $('mode').value = D.demo.mode; $('fenceW').value = D.demo.fenceW;
+setBridge(D.demo.bridge, '示範：' + D.demo.name); wallSettings(true); fenceSettings(); applyShape(); setCamMode(); setActive('bridge');
+(async () => {
+  for (const [slot, key] of [['wall', 'SB'], ['fence', 'fence']]) if (D.demo.img[key]) await setFileImage(slot, D.demo.img[key], '示範：' + D.demo.name);
+  rebindWalls(); drawBoard();
+})();
+
+if (QS.has('debug')) window.__dbg = {
+  goto(m) { gotoMil(m); }, free(e, t) { free = { eye: new THREE.Vector3(...e), target: new THREE.Vector3(...t) }; },
+  freeRel(m, off, h, look2) { gotoMil(m); const p = pointAt(dist), q = pointAt(dist + 25), f = q.clone().sub(p).setY(0).normalize(), r = new THREE.Vector3().crossVectors(f, UP);
+    const eye = p.clone().addScaledVector(r, off[0]).addScaledVector(f, off[1]).addScaledVector(UP, h); const tg = p.clone().addScaledVector(r, look2[0]).addScaledVector(f, look2[1]).addScaledVector(UP, look2[2]);
+    free = { eye, target: tg }; },
+  off() { free = null; }, state() { return { dist, mil: milAt(dist) }; }, piers: PIERS, seg: SEG, ed: ED, sh: SH,
+  down(m, off = 0) { gotoMil(m); const p = pointAt(dist), q = pointAt(dist + 5), f = q.clone().sub(p).setY(0).normalize(), r = new THREE.Vector3().crossVectors(f, UP);
+    const o = p.clone().addScaledVector(r, off); const rc = new THREE.Raycaster(new THREE.Vector3(o.x, o.y + 3, o.z), new THREE.Vector3(0, -1, 0));
+    const h = rc.intersectObjects(scene.children, false)[0]; return h ? [h.object.name || h.object.type, +(h.point.y - p.y).toFixed(2)] : null; },
+  scan(m0, m1, step, off = 0) { const bad = []; for (let m = m0; m <= m1; m += step) { const h = this.down(m, off); if (!h || h[0] !== 'road') bad.push(m + ':' + (h ? h.join('@') : 'none')); } return bad; },
+  pick(nx, ny) { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx * 2 - 1, 1 - ny * 2), camera); const h = rc.intersectObjects(scene.children, false)[0]; return h ? { name: h.object.name || h.object.type, d: +h.distance.toFixed(1), p: h.point.toArray().map(v => +v.toFixed(1)) } : null; } };
+const vp = new THREE.Matrix4(); let last = performance.now(), fpsAcc = 0, fpsN = 0, tick = 0;
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  for (const b of pending) applyBoard(b); pending.clear();
+  lookT = keys.ArrowLeft ? -70 : keys.ArrowRight ? 70 : 0; look += (lookT - look) * Math.min(1, dt * 5); nag(now);
+  const v = playing && !free ? Number($('speed').value) / 3.6 : 0;
+  dist += v * dt; if (dist > NP - 30) dist = 5;
+  pose(camera, dist); pose(camPrev, dist - v * SHUTTER);
+  { // eye adaptation in the driver view: inside a bore the eye opens up slowly (entering = black hole), outside it closes fast (exit = white hole)
+    const m = milAt(dist), inB = $('cam').value === 'drive' && !free && $('adapt').checked && BORES.some(([a, b]) => m >= a && m <= b), U = post.uniforms.uExp;
+    if ($('cam').value !== 'drive' || free || !$('adapt').checked) U.value = 1;
+    else U.value += ((inB ? 7 : 1) - U.value) * (1 - Math.exp(-(inB ? 0.3 : 0.9) * dt));   // exaggerated on purpose (使用者：再誇張一點)
+  }
+  post.uniforms.uInvVP.value.copy(vp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)).invert();
+  post.uniforms.uPrevVP.value.multiplyMatrices(camPrev.projectionMatrix, camPrev.matrixWorldInverse);
+  const mil = milAt(dist);
+  updateTraffic(mil, v, playing && !free ? dt : 0);
+  renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+  renderer.toneMappingExposure = post.uniforms.uExp.value; renderer.autoClear = false; renderer.render(traffic, camera); renderer.autoClear = true;
+  if (shotReq) { shotReq = false; renderer.domElement.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = '模擬截圖_' + fmtMil(mil).replace('+', '') + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }); }
+  $('hud').textContent = '里程 ' + fmtMil(mil) + '　' + segAt(mil).name + partAt(mil) + '　' + Math.round(v * 3.6) + ' km/h';
+  if (++tick % 6 === 0) { drawRoute(mil); $('posV').textContent = fmtMil(mil); }
+  fpsAcc += dt; fpsN++; if (fpsAcc > 1) { $('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
