@@ -81,6 +81,11 @@ button:disabled { opacity: .45; cursor: default; }
 @media (max-width: 1250px) { header .sub { display: none; } }
 body.full { display: block; } body.full header, body.full .bar, body.full .board { display: none; }
 body.full .panes { display: block; padding: 0; container-type: normal; } body.full #simPane { width: 100vw; height: 56.25vw; aspect-ratio: auto; border-radius: 0; }
+/* 另開視窗 (?popup=1): only the 3D canvas, filling the window (projector / second screen) */
+body.popup { display: block; background: #000; } body.popup header, body.popup .bar, body.popup .board { display: none; }
+body.popup .panes { display: block; padding: 0; container-type: normal; } body.popup #simPane { width: 100vw; height: 100vh; height: 100dvh; aspect-ratio: auto; border-radius: 0; }
+body.popup #simPane > :not(canvas):not(#popHint) { display: none; }
+#popHint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 5px 14px; background: rgba(0,0,0,.6); border-radius: 4px; color: #e8ecee; font-size: 13px; white-space: nowrap; pointer-events: none; transition: opacity .6s; }
 </style>
 <script src="data.js"></script>
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }</script>
@@ -113,6 +118,7 @@ body.full .panes { display: block; padding: 0; container-type: normal; } body.fu
     <label title="明暗適應：進隧道先暗後慢慢適應、出隧道瞬間過曝再恢復（駕駛視角）"><input type="checkbox" id="adapt" checked> 明暗</label>
     <label title="其他車輛（同向會超車、對向來車）"><input type="checkbox" id="traffic" checked> 車流</label>
     <button id="shot" title="把目前的模擬畫面存成 PNG">截圖</button>
+    <button id="popOut" title="把 3D 畫面另開一個視窗（可拖到投影機或第二螢幕，在該視窗按 F 全螢幕）；播放、位置、視角、光線與畫布設計都跟這裡同步">另開視窗</button>
   </div>
   <span class="vsep"></span>
   <div class="grp"><button class="primary" id="pickDir" title="資料夾裡的 隔音牆.png（或 南下_車道側.png）、施工圍籬.png、方案設定.xlsx 會自動對應；Illustrator 重新匯出或 Excel 存檔後自動更新">方案資料夾</button><button id="pickFiles" title="選擇個別檔案">檔案</button>
@@ -169,6 +175,9 @@ const D = window.PREVIEW;
 const $ = id => document.getElementById(id);
 const QS = new URLSearchParams(location.search);
 if (QS.has('full')) document.body.classList.add('full');
+const POPUP = QS.has('popup');                            // 另開視窗: display only, everything comes from the main window
+if (POPUP) { document.body.classList.add('popup'); document.title = '套皮即時預覽・3D'; }
+const LINK_OUT = new Set();                               // boards changed since the last send to the 另開視窗
 const SHUTTER = 1 / 60;                                   // same exposure as the UE renders (60 fps, 360° shutter)
 const PXM = 50;                                           // canvas px per metre (= the Illustrator templates)
 const WL = Object.assign({}, D.wall);                     // rows / row_h / bay_m; rows can be changed on the page (牆高)
@@ -838,7 +847,7 @@ const BRTAB = { key: 'bridge', label: '鋼構橋', layers: [], sel: -1, bg: '#ff
 const pending = new Set();
 function scheduleApply(b) { pending.add(b); }            // always live
 function applyBoard(b) {
-  b.render();
+  b.render(); if (!POPUP) LINK_OUT.add(b);
   if (b.key === 'band') { updateBand(); applyShape(); }
   if (b.key.startsWith('wall')) rebindWalls();
 }
@@ -951,6 +960,7 @@ function boardScale() {                                 // fit the stage; very w
   const z = Number($('bZoom').value) / 100; return base * Math.pow(6, z);
 }
 function drawBoard() {
+  if (POPUP) return;                                      // no editor in the 另開視窗
   if (active === BRTAB) { drawBridgeEditor(); return; }
   const b = active; if (b.dirty) b.render();
   scale = boardScale();
@@ -1180,7 +1190,7 @@ $('pickFiles').onclick = async () => {
   } else $('fileIn').click();
 };
 $('fileIn').onchange = async e => { for (const f of e.target.files) await loadFromFile(f); };
-pane.addEventListener('dragover', e => { e.preventDefault(); $('drop').style.display = 'flex'; });
+pane.addEventListener('dragover', e => { if (POPUP) return; e.preventDefault(); $('drop').style.display = 'flex'; });
 pane.addEventListener('dragleave', () => { $('drop').style.display = 'none'; });
 pane.addEventListener('drop', async e => {
   e.preventDefault(); $('drop').style.display = 'none';
@@ -1234,14 +1244,14 @@ function setCamMode() {
 $('cam').addEventListener('change', setCamMode); $('side').addEventListener('change', setCamMode);
 { // drag / wheel on the 3D view (orbit + elevation); a click without dragging picks a wall / fence and selects that cell on the canvas
   let d0 = null;
-  pane.addEventListener('pointerdown', e => { d0 = { x: e.clientX, y: e.clientY, az: ORB.az, el: ORB.el, moved: false }; pane.setPointerCapture(e.pointerId); });
+  pane.addEventListener('pointerdown', e => { if (POPUP) return; d0 ={ x: e.clientX, y: e.clientY, az: ORB.az, el: ORB.el, moved: false }; pane.setPointerCapture(e.pointerId); });
   pane.addEventListener('pointermove', e => {
     if (!d0) return; const dx = e.clientX - d0.x, dy = e.clientY - d0.y; if (Math.abs(dx) + Math.abs(dy) > 4) d0.moved = true;
     if ($('cam').value === 'orbit') { ORB.az = d0.az - dx * 0.008; ORB.el = Math.max(0.05, Math.min(1.45, d0.el + dy * 0.006)); }
   });
   pane.addEventListener('pointerup', e => { if (d0 && !d0.moved) pickAt(e); d0 = null; });
   pane.addEventListener('wheel', e => {
-    const m = $('cam').value; if (m === 'drive') return; e.preventDefault(); const f = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+    const m = $('cam').value; if (m === 'drive' || POPUP) return; e.preventDefault(); const f = e.deltaY > 0 ? 1.12 : 1 / 1.12;
     if (m === 'orbit') ORB.r = Math.max(12, Math.min(900, ORB.r * f)); else { ELV.fov = Math.max(2, Math.min(30, ELV.fov * f)); setCamMode(); }
   }, { passive: false });
 }
@@ -1311,13 +1321,18 @@ $('shot').onclick = () => { shotReq = true; };
 const togglePlay = () => { playing = !playing; $('play').textContent = playing ? '❚❚ 暫停' : '▶ 播放'; };
 $('play').onclick = togglePlay;
 const keys = {};
+function keyAct(code, down) {                             // this window's keys and the ones forwarded from the 另開視窗
+  if (!down) { delete keys[code]; return; }
+  if (code === 'Space') togglePlay();
+  if (code === 'ArrowUp' || code === 'ArrowDown') { const s = $('speed'); s.value = Number(s.value) + (code === 'ArrowUp' ? 5 : -5); s.oninput(); }
+  if (code === 'ArrowLeft' || code === 'ArrowRight') { if (!keys.ArrowLeft && !keys.ArrowRight) { holdT = performance.now(); nagged = false; } keys[code] = true; }
+}
 window.addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-  if (e.code === 'Space' && e.target.tagName !== 'BUTTON') { e.preventDefault(); togglePlay(); }
-  if (e.code === 'ArrowUp' || e.code === 'ArrowDown') { e.preventDefault(); const s = $('speed'); s.value = Number(s.value) + (e.code === 'ArrowUp' ? 5 : -5); s.oninput(); }
-  if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') { e.preventDefault(); if (!keys.ArrowLeft && !keys.ArrowRight) { holdT = performance.now(); nagged = false; } keys[e.code] = true; }
+  if (POPUP || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.code === 'Space' && e.target.tagName !== 'BUTTON') { e.preventDefault(); keyAct(e.code, true); }
+  if (e.code.startsWith('Arrow')) { e.preventDefault(); keyAct(e.code, true); }
 });
-window.addEventListener('keyup', e => { delete keys[e.code]; });
+window.addEventListener('keyup', e => { if (!POPUP) keyAct(e.code, false); });
 window.addEventListener('blur', () => { for (const k in keys) delete keys[k]; });
 // 惡趣味 (使用者 10/27): holding ← / → for 5 s in the driver view flashes a warning twice, once per hold
 let holdT = 0, nagged = false;
@@ -1372,7 +1387,7 @@ const statsOf = key => {                                   // whole-route totals
 // demo scheme
 $('wallN').value = Math.max(1, Math.round(D.demo.W / WL.bay_m)); $('mode').value = D.demo.mode; $('fenceW').value = D.demo.fenceW;
 setBridge(D.demo.bridge, '示範：' + D.demo.name); wallSettings(true); fenceSettings(); applyShape(); setCamMode(); setActive('bridge');
-(async () => {
+if (!POPUP) (async () => {                                // the 另開視窗 gets the canvases from the main window instead
   for (const [slot, key] of [['wall', 'SB'], ['fence', 'fence']]) if (D.demo.img[key]) await setFileImage(slot, D.demo.img[key], '示範：' + D.demo.name);
   rebindWalls(); drawBoard();
 })();
@@ -1388,13 +1403,139 @@ if (QS.has('debug')) window.__dbg = {
     const h = rc.intersectObjects(scene.children, false)[0]; return h ? [h.object.name || h.object.type, +(h.point.y - p.y).toFixed(2)] : null; },
   scan(m0, m1, step, off = 0) { const bad = []; for (let m = m0; m <= m1; m += step) { const h = this.down(m, off); if (!h || h[0] !== 'road') bad.push(m + ':' + (h ? h.join('@') : 'none')); } return bad; },
   pick(nx, ny) { const rc = new THREE.Raycaster(); rc.setFromCamera(new THREE.Vector2(nx * 2 - 1, 1 - ny * 2), camera); const h = rc.intersectObjects(scene.children, false)[0]; return h ? { name: h.object.name || h.object.type, d: +h.distance.toFixed(1), p: h.point.toArray().map(v => +v.toFixed(1)) } : null; } };
+// ================= 另開視窗 (?popup=1): a second window with only the 3D view, kept in sync with this one =================
+// The main window is the editor and sends its state; the 另開視窗 only displays it and sends back a heartbeat (with its
+// position) and the keys pressed in it. Every message goes out on each transport that is available: the window reference
+// (window.open / window.opener; works on file://), BroadcastChannel (may not deliver on file://), and localStorage only
+// when neither exists. Duplicates are dropped by sender + sequence number. Traffic is random in each window (not synced).
+const LINK = { id: Math.random().toString(36).slice(2), seq: 0, seen: new Set(), peer: null, bc: null, alive: 0, design: '', sentT: 0,
+               master: null, masterT: 0, follow: null, hello: 0, pop: null, bTok: {} };
+const LS_KEY = 'vb-preview-3d';
+try { LINK.bc = new BroadcastChannel(LS_KEY); LINK.bc.onmessage = e => onLink(e.data); } catch (e) {}
+const peerWin = () => { const w = POPUP ? window.opener : LINK.peer; return w && !w.closed ? w : null; };
+function linkSend(msg) {
+  msg.from = LINK.id; msg.seq = ++LINK.seq;
+  const w = peerWin(); let sent = false;
+  if (w) try { w.postMessage({ vbLink: msg }, '*'); sent = true; } catch (e) {}
+  if (LINK.bc) try { LINK.bc.postMessage(msg); sent = true; } catch (e) {}
+  if (!sent) try { localStorage.setItem(LS_KEY, JSON.stringify(msg)); } catch (e) {}   // storage event in the other window (quota errors ignored)
+}
+window.addEventListener('message', e => { const m = e.data && e.data.vbLink; if (!m) return; if (!POPUP && e.source) LINK.peer = e.source; onLink(m); });
+window.addEventListener('storage', e => { if (e.key === LS_KEY && e.newValue) try { onLink(JSON.parse(e.newValue)); } catch (err) {} });
+const wrapD = d => d > NP - 30 ? 5 + (d - 5) % (NP - 35) : d;   // same loop as the frame: past the end -> back to the start
+function onLink(m) {
+  if (!m || !m.from || m.from === LINK.id) return;
+  const k = m.from + ':' + m.seq; if (LINK.seen.has(k)) return; if (LINK.seen.size > 4000) LINK.seen.clear(); LINK.seen.add(k);
+  const now = performance.now();
+  if (!POPUP) {
+    if (m.t === 'hello') {
+      if (m.fresh || now - LINK.alive > 3000) { LINK.design = ''; for (const b of Object.values(BOARDS)) LINK_OUT.add(b); }   // new / reconnected: send everything
+      LINK.alive = now; LINK.pop = { dist: m.dist, at: now };
+    }
+    if (m.t === 'key') { LINK.alive = now; if (now - last > 400) adoptPopup(now); keyAct(m.code, m.down); sendTick(); }
+    return;
+  }
+  // 另開視窗: follow one main window (the first that talks; another one takes over if it goes quiet for 1.5 s)
+  if (m.t !== 'tick' && m.t !== 'design' && m.t !== 'board') return;   // another 另開視窗's hello / keys
+  if (LINK.master !== m.from) { if (LINK.master && now - LINK.masterT < 1500) return; LINK.master = m.from; }
+  LINK.masterT = now;
+  if (m.t === 'tick') applyTick(m, now); else if (m.t === 'design') applyDesign(m.d); else if (m.t === 'board') applyRemoteBoard(m);
+}
+// ---- main window ----
+function sendTick() {
+  linkSend({ t: 'tick', dist, playing, speed: $('speed').value, look, cam: $('cam').value, view: $('view').value, side: $('side').value, light: $('light').value,
+    blur: $('blur').checked, adapt: $('adapt').checked, traffic: $('traffic').checked, orb: [ORB.az, ORB.el, ORB.r], elv: ELV.fov,
+    free: free ? [free.eye.toArray(), free.target.toArray()] : null });
+}
+const DESIGN_IDS = ['wallN', 'mode', 'wallRows', 'wallGlass', 'wallStep', 'wallTex', 'fenceW', 'cAcc'];
+const designOf = () => ({ v: Object.fromEntries(DESIGN_IDS.map(id => [id, $(id).value])), acc: $('pAccBand').checked,
+  faces: [...document.querySelectorAll('#faces input[type=color]')].map(e => e.value), bands: [...document.querySelectorAll('#faces input[type=checkbox]')].map(e => e.checked), sh: SH });
+function adoptPopup(now) {                                  // this window was throttled (e.g. covered by a full-screen 另開視窗): continue from where that one is
+  const P = LINK.pop; if (!P || now - LINK.alive > 3000 || free) return;
+  dist = wrapD(P.dist + (playing ? Number($('speed').value) / 3.6 : 0) * (now - P.at) / 1000);
+}
+function linkFrame(now) {
+  if (POPUP) {
+    if (now - LINK.hello > 500) { LINK.hello = now; linkSend({ t: 'hello', fresh: !LINK.master, dist }); }
+    popHint(now); return;
+  }
+  if (now - LINK.alive > 3000) return;                      // no 另開視窗
+  sendTick();
+  if (now - LINK.sentT < 200) return; LINK.sentT = now;     // design + canvases at most 5 times a second (dragging a layer)
+  const d = JSON.stringify(designOf()); if (d !== LINK.design) { LINK.design = d; linkSend({ t: 'design', d: JSON.parse(d) }); }
+  for (const b of LINK_OUT) linkSend({ t: 'board', key: b.key, bg: b.bg, url: b.layers.length ? b.out.toDataURL('image/png') : null });
+  LINK_OUT.clear();
+}
+$('popOut').onclick = () => {
+  if (LINK.peer && !LINK.peer.closed) { LINK.peer.focus(); return; }
+  const u = new URL(location.href); u.search = '?popup=1'; u.hash = '';
+  const w = window.open(u.href, 'vbPreview3D', 'popup,width=1280,height=720');
+  if (!w) { alert('瀏覽器擋住了新視窗。\n\n請點網址列右側的「已封鎖彈出式視窗」圖示，選「一律允許」，再按一次「另開視窗」。'); return; }
+  LINK.peer = w; w.focus();
+};
+// ---- 另開視窗 ----
+function applyTick(m, now) {
+  LINK.follow = { dist: m.dist, at: now };
+  playing = m.playing; $('speed').value = m.speed; look = m.look;
+  let camCh = ELV.fov !== m.elv; ELV.fov = m.elv;
+  for (const id of ['cam', 'view', 'side']) if ($(id).value !== m[id]) { $(id).value = m[id]; camCh = true; }
+  if (camCh) setCamMode();
+  if ($('light').value !== m.light) { $('light').value = m.light; setLight(); }
+  if ($('blur').checked !== m.blur) { $('blur').checked = m.blur; $('blur').onchange(); }
+  $('adapt').checked = m.adapt; $('traffic').checked = m.traffic;
+  [ORB.az, ORB.el, ORB.r] = m.orb;
+  free = m.free ? { eye: new THREE.Vector3(...m.free[0]), target: new THREE.Vector3(...m.free[1]) } : null;
+}
+function followMain(now, v, dt) {                           // own clock for smooth motion, pulled toward the main window's position
+  const F = LINK.follow; if (!F) return;
+  const tgt = wrapD(F.dist + v * (now - F.at) / 1000), err = tgt - dist;
+  if (Math.abs(err) > 3) dist = tgt; else dist += err * Math.min(1, dt * 8);
+}
+function applyDesign(d) {
+  const v = d.v, rowsCh = $('wallRows').value !== v.wallRows;
+  if (rowsCh) { $('wallRows').value = v.wallRows; $('wallRows').dispatchEvent(new Event('change')); }   // rebuilds the 透明板 options + the walls
+  const geo = $('wallGlass').value !== v.wallGlass || $('wallStep').value !== v.wallStep;
+  for (const id of DESIGN_IDS) $(id).value = v[id];
+  $('pAccBand').checked = d.acc;
+  document.querySelectorAll('#faces input[type=color]').forEach((e, i) => { e.value = d.faces[i]; PART[e.dataset.part].uniforms.cF.value[Number(e.dataset.f)].set(d.faces[i]); });
+  document.querySelectorAll('#faces input[type=checkbox]').forEach((e, i) => { e.checked = d.bands[i]; });
+  for (const k of Object.keys(SH)) SH[k] = Array.isArray(d.sh[k]) ? d.sh[k].slice() : d.sh[k];
+  wallSettings(geo); fenceSettings(); updateBand(); applyShape();
+}
+async function applyRemoteBoard(m) {                        // the main window's rendered canvas becomes the only layer here
+  const b = BOARDS[m.key]; if (!b) return; const tok = LINK.bTok[m.key] = m.seq;
+  const img = m.url ? await loadImg(m.url).catch(() => null) : null; if (LINK.bTok[m.key] !== tok) return;   // a newer one arrived meanwhile
+  b.bg = m.bg; b.layers = img ? [{ img, name: '主視窗', x: 0, y: 0, w: b.out.width, h: b.out.height }] : [];
+  applyBoard(b);
+}
+let hintT = 0;
+function popHint(now) {                                     // key help for a few seconds; a notice while the main window is silent
+  let el = $('popHint'); if (!el) { el = document.createElement('div'); el.id = 'popHint'; pane.append(el); hintT = now; }
+  const lost = now - LINK.masterT > 3000, show = lost || now - hintT < 5000;
+  el.textContent = lost ? (LINK.master ? '與主視窗的連線中斷：請在主視窗重新按「另開視窗」' : '等待主視窗…') : 'F 全螢幕・空白鍵 播放・↑↓ 車速・←→ 轉頭';
+  el.style.opacity = show ? 1 : 0;
+}
+if (POPUP) {
+  const toggleFull = () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); else document.documentElement.requestFullscreen().catch(() => {}); };
+  window.addEventListener('keydown', e => {
+    if (e.code === 'KeyF') { e.preventDefault(); toggleFull(); return; }
+    if (e.code !== 'Space' && !e.code.startsWith('Arrow')) return;
+    e.preventDefault(); if (e.repeat && e.code !== 'ArrowUp' && e.code !== 'ArrowDown') return;   // held ← → / space: once
+    linkSend({ t: 'key', code: e.code, down: true });
+  });
+  window.addEventListener('keyup', e => { if (e.code.startsWith('Arrow')) linkSend({ t: 'key', code: e.code, down: false }); });
+  window.addEventListener('blur', () => { for (const code of ['ArrowLeft', 'ArrowRight']) linkSend({ t: 'key', code, down: false }); });
+  pane.addEventListener('dblclick', toggleFull);
+}
+
 const vp = new THREE.Matrix4(); let last = performance.now(), fpsAcc = 0, fpsN = 0, tick = 0;
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const gap = now - last, dt = Math.min(0.1, gap / 1000); last = now;
   for (const b of pending) applyBoard(b); pending.clear();
-  lookT = keys.ArrowLeft ? -70 : keys.ArrowRight ? 70 : 0; look += (lookT - look) * Math.min(1, dt * 5); nag(now);
+  if (!POPUP) { lookT = keys.ArrowLeft ? -70 : keys.ArrowRight ? 70 : 0; look += (lookT - look) * Math.min(1, dt * 5); nag(now); }   // the 另開視窗 gets look from the main window
   const v = playing && !free ? Number($('speed').value) / 3.6 : 0;
   dist += v * dt; if (dist > NP - 30) dist = 5;
+  if (POPUP) followMain(now, v, dt); else if (gap > 400) adoptPopup(now);
   pose(camera, dist); pose(camPrev, dist - v * SHUTTER);
   { // eye adaptation in the driver view: inside a bore the eye opens up slowly (entering = black hole), outside it closes fast (exit = white hole)
     const m = milAt(dist), inB = $('cam').value === 'drive' && !free && $('adapt').checked && BORES.some(([a, b]) => m >= a && m <= b), U = post.uniforms.uExp;
@@ -1411,6 +1552,7 @@ function frame(now) {
   $('hud').textContent = '里程 ' + fmtMil(mil) + '　' + segAt(mil).name + partAt(mil) + '　' + Math.round(v * 3.6) + ' km/h';
   if (++tick % 6 === 0) { drawRoute(mil); $('posV').textContent = fmtMil(mil); }
   fpsAcc += dt; fpsN++; if (fpsAcc > 1) { $('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
+  linkFrame(now);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
