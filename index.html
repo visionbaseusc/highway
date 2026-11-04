@@ -162,7 +162,7 @@ body.popup #simPane > :not(canvas):not(#popHint) { display: none; }
       <span id="layerOps"><button id="bFill">填滿</button><button id="bUp">上移一層</button><button id="bDown">下移一層</button><button id="bDup">複製</button><button id="bDel">刪除</button><span class="sep"></span></span>
       <label class="status">底色 <input type="color" id="bBg" value="#ffffff"></label>
       <label class="status"><input type="checkbox" id="bGuides" checked> 格線</label>
-      <label class="status">縮放 <input type="range" id="bZoom" min="0" max="100" value="0" style="flex:none;width:80px"></label>
+      <button id="bOverview" title="縮小至完整畫布，並回到左端">顯示全圖</button><label class="status">縮放 <input type="range" id="bZoom" min="0" max="100" value="0" style="flex:none;width:80px"></label>
     </div>
   </div>
   <div class="stage" id="stage"><canvas id="boardCv"></canvas></div>
@@ -834,9 +834,10 @@ class Board {
   addImage(img, name, opts = {}) {
     const W = this.out.width, H = this.out.height, ar = img.width / img.height;
     let w, h, x = opts.x ?? 0, y = 0;
-    if (opts.fill) { w = W; h = H; } else if (opts.cell) { ({ x, y, w, h } = opts.cell); } else { h = H; w = h * ar; }
+    const fill = opts.fill || (this.key === 'wall' && $('wallMapping').value === 'fit' && !opts.cell);
+    if (fill) { x = 0; w = W; h = H; } else if (opts.cell) { ({ x, y, w, h } = opts.cell); } else { h = H; w = h * ar; }
     const L = { img, name, x, y, w, h, linked: opts.linked || null };
-    if (opts.linked) { const i = this.layers.findIndex(l => l.linked === opts.linked); if (i >= 0) { const o = this.layers[i]; L.x = o.x; L.y = o.y; L.w = o.w; L.h = o.h; if (opts.fill) { L.x = 0; L.y = 0; L.w = W; L.h = H; } this.layers[i] = L; this.sel = i; this.changed(); return L; } }
+    if (opts.linked) { const i = this.layers.findIndex(l => l.linked === opts.linked); if (i >= 0) { const o = this.layers[i]; L.x = o.x; L.y = o.y; L.w = o.w; L.h = o.h; if (fill) { L.x = 0; L.y = 0; L.w = W; L.h = H; } this.layers[i] = L; this.sel = i; this.changed(); return L; } }
     this.layers.push(L); this.sel = this.layers.length - 1; this.changed(); return L;
   }
   changed() { this.dirty = true; scheduleApply(this); drawBoard(); updateButtons(); }
@@ -992,14 +993,14 @@ $('bAdv').onclick = () => setActive('band'); $('bBack').onclick = () => setActiv
 const cv = $('boardCv'), stage = $('stage');
 let active = BOARDS.wall, scale = 1, drag = null, showGuides = true;
 const HINT = {
-  board: '把圖片拖進畫布，或點一格再 Ctrl+V 貼上；拖曳移動、拖角落縮放、滾輪縮放、Delete 刪除。在模擬畫面點牆或圍籬，也會選到對應的格子。圖面左邊＝行車前方。',
+  board: '整段鋪圖：拖入或貼上會完整鋪滿；點選一格再貼上則只填該格。顯示全圖可查看兩端，縮放可放大編輯。拖曳移動、拖角落縮放、滾輪縮放、Delete 刪除。在模擬畫面點牆或圍籬，也會選到對應的格子。圖面左邊＝行車前方。',
   band: '拖入一張漸層圖：勾選的面依橋墩所在位置取色（左＝起點、右＝終點；藍底＝鋼構橋路段）。',
   bridge: '拖曳圓點調整色塊；選「漸變」時調第一座和最後一座，中間的橋墩自動漸變。斜線區＝從車道看會被施工圍籬擋住的高度。右邊是整座橋，點橋墩可把鏡頭移過去。' };
-function boardScale() {                                 // fit the stage; very wide boards stay >= 100 px tall and scroll sideways
-  const b = active, aw = stage.offsetWidth - 22, ah = Math.max(40, stage.offsetHeight - 16 - 14);
-  const minH = Math.min(ah, b.key === 'band' ? 48 : 100);
-  const base = Math.min(ah / b.out.height, Math.max(aw / b.out.width, minH / b.out.height));
-  const z = Number($('bZoom').value) / 100; return Math.min(base * Math.pow(6, z), 16384 / b.out.width);
+function boardScale() {                                 // zero zoom always shows the complete design
+  const b = active, aw = Math.max(1, stage.clientWidth - 22), ah = Math.max(1, stage.clientHeight - 18);
+  const base = Math.min(aw / b.out.width, ah / b.out.height);
+  const z = Number($('bZoom').value) / 100;
+  return Math.min(base * Math.pow(32, z), 16384 / b.out.width);
 }
 function drawBoard() {
   if (POPUP) return;                                      // no editor in the 另開視窗
@@ -1159,6 +1160,7 @@ $('bDel').onclick = () => { active.layers.splice(active.sel, 1); active.sel = -1
 $('bBg').oninput = () => { active.bg = $('bBg').value; active.changed(); };
 $('bGuides').onchange = () => { showGuides = $('bGuides').checked; drawBoard(); };
 $('bZoom').oninput = drawBoard;
+$('bOverview').onclick = () => { $('bZoom').value = 0; stage.scrollLeft = 0; stage.scrollTop = 0; drawBoard(); };
 function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src; }); }
 stage.addEventListener('dragover', e => e.preventDefault());
 stage.addEventListener('drop', async e => {

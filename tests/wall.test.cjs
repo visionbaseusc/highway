@@ -55,3 +55,27 @@ for(const max of [4096,8192]) test(`resize composition and cap long-wall canvas 
     assert.ok(Math.abs(layers[1].y/out.height-.2)<1e-8);
   }
 });
+
+for (const length of [100,250,700]) test(`${length} m: whole-wall paste and drop include both image edges`,()=>{
+  const {context}=setup(length);
+  vm.runInContext(`var board = Object.create(Board.prototype); board.key='wall'; board.out={width:8192,height:98}; board.layers=[]; board.changed=()=>{}; board.setSize(${length},3); $=()=>({value:'fit'});`,context);
+  // Twice as wide as the intended physical wall; old height-only fitting cropped half.
+  vm.runInContext(`board.addImage({width:${length*100},height:150},'wide',{x:500})`,context);
+  const r=JSON.parse(vm.runInContext('JSON.stringify({layer:board.layers[0],out:board.out})',context));
+  assert.equal(r.layer.x,0); assert.equal(r.layer.y,0);
+  assert.equal(r.layer.w,r.out.width); assert.equal(r.layer.h,r.out.height);
+  vm.runInContext(`board.addImage({width:1000,height:300},'cell',{cell:{x:12,y:4,w:24,h:10}})`,context);
+  const cell=JSON.parse(vm.runInContext('JSON.stringify(board.layers[1])',context));
+  assert.deepEqual([cell.x,cell.y,cell.w,cell.h],[12,4,24,10]);
+});
+test('overview fits the whole canvas at each preset and zoom can enlarge it',()=>{
+  const context=vm.createContext({active:{out:{width:8192,height:98}},stage:{clientWidth:1246,clientHeight:120},$:()=>({value:0})});
+  vm.runInContext(section('function boardScale()', 'function drawBoard()'),context);
+  for(const [w,h] of [[5000,150],[8192,98],[8192,35]]){
+    context.active.out={width:w,height:h};
+    const scale=vm.runInContext('boardScale()',context);
+    assert.ok(w*scale<=1224 && h*scale<=102);
+  }
+  context.$=()=>({value:100});
+  assert.ok(vm.runInContext('boardScale()*active.out.width',context)>1246);
+});
