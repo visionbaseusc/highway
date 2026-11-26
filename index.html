@@ -23,15 +23,6 @@ header .sub { color: var(--muted); font-size: 12px; white-space: nowrap; overflo
 .hud { position: absolute; left: 10px; bottom: 8px; padding: 3px 10px; background: rgba(0,0,0,.55); border-radius: 3px; font-size: 15px; font-variant-numeric: tabular-nums; pointer-events: none; }
 .note { position: absolute; right: 10px; bottom: 8px; padding: 2px 8px; background: rgba(0,0,0,.55); border-radius: 3px; font-size: 11.5px; color: #cfd6da; pointer-events: none; }
 .viewhint { position: absolute; right: 10px; top: 8px; padding: 2px 8px; background: rgba(0,0,0,.55); border-radius: 3px; font-size: 11.5px; color: #cfd6da; pointer-events: none; }
-/* 警示：全寬紅色帶＋上下黃黑警示斜紋、粗黑體、硬切閃兩下，四周紅色暈邊（使用者：要真的有警語的感覺，會嚇一跳） */
-#nag { position: absolute; left: 0; right: 0; bottom: 17%; padding: .72em 0 .68em; text-align: center; background: rgba(222, 0, 0, .94); color: #fff;
-       font: 900 26px/1.15 "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; letter-spacing: .14em; white-space: nowrap;
-       text-shadow: 0 2px 0 rgba(0,0,0,.45); opacity: 0; pointer-events: none; }
-#nag::before, #nag::after { content: ''; position: absolute; left: 0; right: 0; height: .34em; background: repeating-linear-gradient(-45deg, #ffd000 0 .55em, #111 .55em 1.1em); }
-#nag::before { top: 0; } #nag::after { bottom: 0; }
-#nag b { color: #ffd000; font-weight: 900; margin: 0 .5em; }
-#nag.show { animation: nagFlash 1.6s step-end forwards; }
-@keyframes nagFlash { 0% { opacity: 1; } 28% { opacity: 0; } 44% { opacity: 1; } 72% { opacity: 0; } 100% { opacity: 0; } }
 #drop { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(242,154,46,.25); border: 3px dashed var(--accent); font-size: 20px; text-align: center; }
 .bar { grid-area: bar; display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 8px 16px 0; }
 .grp { display: flex; align-items: center; gap: 6px; }
@@ -101,8 +92,7 @@ body.popup #simPane > :not(canvas):not(#popHint) { display: none; }
     <div class="viewhint" id="viewHint"></div>
     <div class="hud" id="hud">—</div>
     <div class="note" id="fps"></div>
-    <div id="nag"><b>⚠</b>專心駕駛！不要東張西望！<b>⚠</b></div>
-    <div id="drop">放開以載入<br><small>隔音牆.png、施工圍籬.png、方案設定.xlsx</small></div>
+    <div id="drop">放開以載入<br><small>隔音牆_100 / _250 / _700、施工圍籬（.png / .jpg）、方案設定.xlsx</small></div>
   </div>
 </div>
 
@@ -121,22 +111,21 @@ body.popup #simPane > :not(canvas):not(#popHint) { display: none; }
     <button id="popOut" title="把 3D 畫面另開一個視窗（可拖到投影機或第二螢幕，在該視窗按 F 全螢幕）；播放、位置、視角、光線與畫布設計都跟這裡同步">另開視窗</button>
   </div>
   <span class="vsep"></span>
-  <div class="grp"><button class="primary" id="pickDir" title="資料夾裡的 隔音牆.png（或 南下_車道側.png）、施工圍籬.png、方案設定.xlsx 會自動對應；Illustrator 重新匯出或 Excel 存檔後自動更新">方案資料夾</button><button id="pickFiles" title="選擇個別檔案">檔案</button>
-    <span class="chips"><span class="chip">隔音牆<b id="s_wall">—</b></span><span class="chip">圍籬<b id="s_fence">—</b></span><span class="chip">設定<b id="s_xlsx">—</b></span></span>
+  <div class="grp"><button class="primary" id="pickDir" title="資料夾裡的 隔音牆_100.png、隔音牆_250.png、隔音牆_700.png（隔音牆.png 或 南下_車道側.png ＝ 250 m）、施工圍籬.png、方案設定.xlsx 會自動對應（也可用 .jpg）；Illustrator 重新匯出或 Excel 存檔後自動更新">方案資料夾</button><button id="pickFiles" title="選擇個別檔案">檔案</button>
+    <span class="chips"><span class="chip">牆100<b id="s_wall100">—</b></span><span class="chip">牆250<b id="s_wall250">—</b></span><span class="chip">牆700<b id="s_wall700">—</b></span><span class="chip">圍籬<b id="s_fence">—</b></span><span class="chip">設定<b id="s_xlsx">—</b></span></span>
     <span class="status" id="watchStatus"></span></div>
 </div>
 
 <section class="board">
   <div class="tabs" id="tabs">
-    <button data-tab="fence">施工圍籬</button><button data-tab="wall">隔音牆</button><button data-tab="bridge">鋼構橋</button>
+    <button data-tab="fence">施工圍籬</button><button data-tab="wall100">隔音牆 100 m</button><button data-tab="wall250">隔音牆 250 m</button><button data-tab="wall700">隔音牆 700 m</button><button data-tab="bridge">鋼構橋</button>
     <span class="status" id="bSize"></span>
   </div>
   <div class="toolbar">
-    <div class="pset" data-for="fence"><label>單元寬度</label><input type="number" id="fenceW" min="2" step="2" value="20"> m</div>
+    <div class="pset" data-for="fence"><label>單元寬度</label><input type="number" id="fenceW" min="2" step="0.1" value="20" title="載入施工圍籬圖時會依圖片長寬比自動設定（高 2.4 m）"> m</div>
     <div class="pset" data-for="wall">
-      <label for="wallLength">測試牆段</label><input type="number" id="wallLength" min="2" max="700" step="1" value="250" title="起點直立式測試牆的實際長度（2–700 m）"> m
-      <span class="seg" id="wallPresets"><button data-length="100">100 m</button><button data-length="250" class="on">250 m</button><button data-length="700">700 m</button></span>
-      <button id="wallStart">前往測試牆</button>
+      <input type="hidden" id="wallLength" value="250">
+      <button id="wallStart" title="開到目前這張畫布對應的測試牆">前往這段牆</button>
       <label for="wallMapping">鋪圖</label><select id="wallMapping"><option value="fit">整段鋪圖一次</option><option value="repeat">循環重複</option></select>
       <label for="wallRepeat">循環長度</label><input type="number" id="wallRepeat" min="2" max="700" step="1" value="40" disabled> m <span class="status" id="wallWv"></span>
       <select id="mode" title="上色方式"><option value="板塊">每片板單色</option><option value="自由">圖案跨板</option></select>
@@ -171,7 +160,7 @@ body.popup #simPane > :not(canvas):not(#popHint) { display: none; }
     <div class="brand"><span>© 2026 VISION BASE<br>版權所有</span><img src="logo_visionbase.png" alt="VISION BASE"></div>
   </div>
 </section>
-<input type="file" id="fileIn" accept=".png,.xlsx" multiple hidden>
+<input type="file" id="fileIn" accept=".png,.jpg,.jpeg,.xlsx" multiple hidden>
 
 <script type="module">
 import * as THREE from 'three';
@@ -254,7 +243,7 @@ offs(MATS.road, -1, -2); offs(MATS.roadIn, -1, -2); for (const k of ['white', 'y
 // 2026-10-27 使用者：「路段太多，不知道要看什麼」→ no empty straights / curves any more: the three scenarios follow each other with
 // 100 m transitions; round ① on the straight, round ② in curves (straight / curve is a property of each scenario now)
 const SEG = [
-  ['straight', 1000, 0, '直立式隔音牆測試', '隔音牆測試'], ['tunnel', 980, 0, '隧道①（直線）', '隧道①'], ['straight', 100, 0, '過渡', ''],
+  ['straight', 1750, 0, '直立式隔音牆測試', '隔音牆測試'], ['tunnel', 980, 0, '隧道①（直線）', '隧道①'], ['straight', 100, 0, '過渡', ''],
   ['bridge', 1350, 0, '鋼構橋①（直線）', '鋼構橋①'], ['straight', 100, 0, '過渡', ''], ['trees', 900, 0, '欒樹①（直線）', '欒樹①'],
   ['straight', 100, 0, '過渡', ''], ['tunnel', 980, 1800, '隧道②（右彎）', '隧道②・彎'], ['straight', 100, 0, '過渡', ''],
   ['bridge', 1350, -1500, '鋼構橋②（左彎）', '鋼構橋②・彎'], ['straight', 100, 0, '過渡', ''], ['trees', 900, 1200, '欒樹②（右彎）', '欒樹②・彎'],
@@ -340,13 +329,16 @@ KOEL.forEach((K, i) => { const s = i ? -1 : 1;
     WALLS[sg] = WALLS[sg].flatMap(([a, b]) => spans(a, b, wholes)).filter(([a, b]) => b - a > 20);
   }
 }
-// Dedicated straight test bay; other scenario walls retain their original extents.
-const WALL_TEST_START = 80;
+// Three separate straight test bays, 100 / 250 / 700 m, 150 m apart (使用者 11/26：區分開來); other scenario walls keep their extents.
+const WALL_TEST_GAP = 150;
+const WALL_TESTS = (() => { let s = 80; return [100, 250, 700].map(L => { const t = { L, a: s, b: s + L }; s += L + WALL_TEST_GAP; return t; }); })();
+const WALL_TEST_START = WALL_TESTS[0].a;
+const wallTestOf = L => WALL_TESTS.find(t => t.L === L) || WALL_TESTS[0];
+const wallBoardOf = (a, b) => { const t = WALL_TESTS.find(t => t.a === a && t.b === b); return 'wall' + (t ? t.L : 250); };   // which design canvas a wall shows
 const SCENARIO_WALLS = Object.fromEntries([1, -1].map(sg => [sg, WALLS[sg].map(v => v.slice())]));
 const wallMetres = id => Math.max(2, Math.min(700, Number($(id).value) || (id === 'wallLength' ? 250 : 40)));
 function setWallRanges() {
-  const length = wallMetres('wallLength');
-  for (const sg of [1, -1]) WALLS[sg] = [[WALL_TEST_START, WALL_TEST_START + length], ...SCENARIO_WALLS[sg]];
+  for (const sg of [1, -1]) WALLS[sg] = [...WALL_TESTS.map(t => [t.a, t.b]), ...SCENARIO_WALLS[sg]];
 }
 setWallRanges();
 const fenceAt = (sg, m) => FENCE[sg].some(([a, b]) => m >= a && m < b), wallAt = (sg, m) => WALLS[sg].some(([a, b]) => m >= a && m < b);
@@ -610,6 +602,32 @@ let pierGeo;
   inst(ico, km, crowns, 'koel', ccol); inst(ico, km, tops, 'koel', tcol);
 }
 
+// ---- test-bay length labels: faint "100 m / 250 m / 700 m" floating above each test wall (使用者 11/26：很直觀知道這道牆多長) ----
+const WALL_LABELS = [];
+const WALL_LABEL_TEX = {};
+function wallLabelTex(L) {
+  if (WALL_LABEL_TEX[L]) return WALL_LABEL_TEX[L];
+  const c = document.createElement('canvas'); c.width = 512; c.height = 192; const g = c.getContext('2d');
+  g.font = '900 150px "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 14; g.strokeStyle = 'rgba(20,28,34,.55)'; g.strokeText(L + ' m', 256, 100);
+  g.fillStyle = '#ffffff'; g.fillText(L + ' m', 256, 100);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return (WALL_LABEL_TEX[L] = t);
+}
+function buildWallLabels() {
+  for (const s of WALL_LABELS) { scene.remove(s); s.material.dispose(); } WALL_LABELS.length = 0;
+  for (const t of WALL_TESTS) for (const sg of [1, -1]) {
+    const y = sg * Y_WALL, up = sg > 0 ? t.a : t.b, dir = sg > 0 ? 1 : -1;     // upstream end in that line's driving direction
+    for (const m of [up + dir * 15, (t.a + t.b) / 2]) {
+      const F = fr(m), p = P(F, y, gnd(m, y, F) + 0.35 + RW + 2.2);
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: wallLabelTex(t.L), transparent: true, opacity: 0.5, depthWrite: false, fog: true }));
+      s.position.set(p[0], p[1], p[2]); s.scale.set(8, 3, 1); s.renderOrder = 3; s.name = 'wallLabel_' + t.L;
+      scene.add(s); WALL_LABELS.push(s);
+    }
+  }
+}
+buildWallLabels();
+
 // ---- sound walls: colours from the design canvas exactly like skin_compile.py ----
 // rows from the bottom; the top uGlass rows are transparent panels (tinted by the design); uTex = panel relief (素面／水平紋／垂直格柵)
 function wallMat(tex) {
@@ -657,7 +675,7 @@ function buildWalls() {
   let wi = 0, len = 0, area = 0, glassA = 0;
   for (const sg of [1, -1]) for (const [a, b] of WALLS[sg]) {
     const y = sg * Y_WALL, n = Math.ceil((b - a) / WL.bay_m), mb = b, line = sg > 0 ? 'SB' : 'NB';
-    let w = WMATS[wi]; if (!w) { w = { mat: wallMat(null), line }; WMATS.push(w); } w.line = line; w.mat.uniforms.uLength.value = b - a; wi++;
+    let w = WMATS[wi]; if (!w) { w = { mat: wallMat(null), line }; WMATS.push(w); } w.line = line; w.board = wallBoardOf(a, b); w.mat.uniforms.uLength.value = b - a; wi++;
     const pos = [], nor = [], al = [], hh = [], bi = [], idx = [], rowsOf = k => Math.max(1, WL.rows - Math.max(0, steps - Math.min(k, n - 1 - k)));
     for (let k = 0; k < n; k++) {
       const m0 = sg > 0 ? a + k * WL.bay_m : Math.max(a, b - (k + 1) * WL.bay_m), m1 = sg > 0 ? Math.min(b, m0 + WL.bay_m) : b - k * WL.bay_m, F0 = fr(m0), F1 = fr(m1), bay = k, H = rowsOf(k) * WL.row_h;
@@ -673,7 +691,7 @@ function buildWalls() {
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
     g.setAttribute('aAlong', new THREE.Float32BufferAttribute(al, 1)); g.setAttribute('aH', new THREE.Float32BufferAttribute(hh, 1));
     g.setAttribute('aBay', new THREE.Float32BufferAttribute(bi, 1)); g.setIndex(idx);
-    const me = new THREE.Mesh(g, w.mat); me.name = 'wall_' + line; me.userData = { sg, length: b - a, start: a, end: b }; me.renderOrder = 2; scene.add(me); WALL_OBJ.push(me);
+    const me = new THREE.Mesh(g, w.mat); me.name = 'wall_' + line; me.userData = { sg, length: b - a, start: a, end: b, board: w.board }; me.renderOrder = 2; scene.add(me); WALL_OBJ.push(me);
     for (let k = 0; k <= n; k++) { const m = sg > 0 ? Math.min(b, a + k * WL.bay_m) : Math.max(a, b - k * WL.bay_m), F = fr(m), H = Math.max(rowsOf(Math.min(k, n - 1)), rowsOf(Math.max(0, k - 1))) * WL.row_h;
       posts.push(mtx(P(F, y, gnd(m, y, F) + B0), -F.p, 0.15, H + 0.08, 0.2)); }
     sweep(curb, CURB, false, range(a, mb, 4), (m, F, u, v) => P(F, y + u, gnd(m, y, F) - 0.1 + (v > 0 ? B0 + 0.1 : 0)));
@@ -812,17 +830,19 @@ class Board {
     this.out = document.createElement('canvas'); this.setSize(wM, hM);
     this.tex = opts.tex || new THREE.CanvasTexture(this.out); this.tex.image = this.out;
     this.tex.colorSpace = THREE.SRGBColorSpace; this.tex.wrapS = THREE.RepeatWrapping; this.tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    this.file = opts.file; this.guides = opts.guides || (() => {}); this.cellOf = opts.cellOf || null; this.sel = -1; this.cell = null; this.dirty = true;
+    this.keepScale = !!opts.keepScale; this.file = opts.file; this.guides = opts.guides || (() => {}); this.cellOf = opts.cellOf || null; this.sel = -1; this.cell = null; this.dirty = true;
   }
   setSize(wM, hM, pxW, pxH) {
     const oldW = this.out.width, oldH = this.out.height;
     this.wM = wM; this.hM = hM;
-    const limit = this.key === 'wall' ? Math.min(8192, renderer.capabilities.maxTextureSize) : Infinity;
+    const limit = this.key.startsWith('wall') ? Math.min(8192, renderer.capabilities.maxTextureSize) : Infinity;
     const density = Math.min(PXM, limit / Math.max(wM, hM));
     this.out.width = Math.min(limit, pxW || Math.max(2, Math.round(wM * density)));
     this.out.height = Math.min(limit, pxH || Math.max(1, Math.round(hM * density)));
     // Preserve the composition when changing the design span or GPU resolution.
-    for (const L of this.layers) { L.x *= this.out.width / oldW; L.w *= this.out.width / oldW; L.y *= this.out.height / oldH; L.h *= this.out.height / oldH; }
+    // The fence keeps its pixels per metre, so a new unit width only adds or crops canvas; images are never stretched.
+    const sx = this.keepScale ? 1 : this.out.width / oldW, sy = this.keepScale ? 1 : this.out.height / oldH;
+    for (const L of this.layers) { L.x *= sx; L.w *= sx; L.y *= sy; L.h *= sy; }
     this.dirty = true; this.cell = null;
   }
   render() {
@@ -834,11 +854,19 @@ class Board {
   addImage(img, name, opts = {}) {
     const W = this.out.width, H = this.out.height, ar = img.width / img.height;
     let w, h, x = opts.x ?? 0, y = 0;
-    const fill = opts.fill || (this.key === 'wall' && $('wallMapping').value === 'fit' && !opts.cell);
+    const fill = opts.fill || (this.key.startsWith('wall') && $('wallMapping').value === 'fit' && !opts.cell);
     if (fill) { x = 0; w = W; h = H; } else if (opts.cell) { ({ x, y, w, h } = opts.cell); } else { h = H; w = h * ar; }
     const L = { img, name, x, y, w, h, linked: opts.linked || null };
     if (opts.linked) { const i = this.layers.findIndex(l => l.linked === opts.linked); if (i >= 0) { const o = this.layers[i]; L.x = o.x; L.y = o.y; L.w = o.w; L.h = o.h; if (fill) { L.x = 0; L.y = 0; L.w = W; L.h = H; } this.layers[i] = L; this.sel = i; this.changed(); return L; } }
-    this.layers.push(L); this.sel = this.layers.length - 1; this.changed(); return L;
+    this.layers.push(L); this.sel = this.layers.length - 1;
+    // A fence image longer than the unit extends the unit instead of being cut off.
+    // One longer than the whole unit becomes the unit (snapped to the left edge, so no sliver of gap repeats along the road).
+    if (this.key === 'fence' && !fill && !opts.cell && x + w > W + 0.5) {
+      if (w > W + 0.5) { L.x = 0; $('fenceW').value = Math.round(w / W * this.wM * 10) / 10; }
+      else $('fenceW').value = Math.ceil((x + w) / W * this.wM * 10 - 1e-6) / 10;
+      fenceSettings();
+    }
+    this.changed(); return L;
   }
   changed() { this.dirty = true; scheduleApply(this); drawBoard(); updateButtons(); }
 }
@@ -867,9 +895,11 @@ const bandGuides = (b, c, s) => {
   for (const t of PIER_T.sb) { const x = t * W; c.beginPath(); c.moveTo(x + .5, H - 10); c.lineTo(x + .5, H); c.stroke(); }
   for (const t of PIER_T.nb) { const x = t * W; c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, 8); c.stroke(); }
 };
-BOARDS.fence = new Board('fence', '施工圍籬', 20, 2.4, { guides: fenceGuides, cellOf: fenceCell, file: '施工圍籬.png' });
-// one wall canvas for both sides (2026-10-27 使用者：只模擬南下，南下北上合併)
-BOARDS.wall = new Board('wall', '隔音牆', 60, RW, { guides: wallGuides, cellOf: wallCell, file: '隔音牆.png' });
+BOARDS.fence = new Board('fence', '施工圍籬', 20, 2.4, { guides: fenceGuides, cellOf: fenceCell, file: '施工圍籬.png', keepScale: true });
+// one wall canvas per test bay (使用者 11/26：100 / 250 / 700 各放不同的圖), each shared by both sides (10/27：南下北上合併);
+// the other scenario walls (tunnels, bridges, trees) use the 250 m canvas
+const WALL_KEYS = WALL_TESTS.map(t => 'wall' + t.L);
+for (const t of WALL_TESTS) BOARDS['wall' + t.L] = new Board('wall' + t.L, '隔音牆 ' + t.L + ' m', t.L, RW, { guides: wallGuides, cellOf: wallCell, file: '隔音牆_' + t.L + '.png' });
 BOARDS.band = new Board('band', '鋼構橋・沿線色帶', 1, 1, { guides: bandGuides, file: '鋼構橋_沿線色帶.png', tex: BAND_TEX, transparent: true });
 BOARDS.band.setSize(BAND[1] - BAND[0], 1, 1200, 48);
 fenceMat.uniforms.tFence.value = BOARDS.fence.tex;
@@ -883,23 +913,23 @@ function applyBoard(b) {
   if (b.key === 'band') { updateBand(); applyShape(); }
   if (b.key.startsWith('wall')) rebindWalls();
 }
-function rebindWalls() { for (const w of WMATS) w.mat.uniforms.tDesign.value = BOARDS.wall.tex; }
+function rebindWalls() { for (const w of WMATS) w.mat.uniforms.tDesign.value = (BOARDS[w.board] || BOARDS.wall250).tex; }
 { // 牆高 (rows of 0.5 m) and 透明板 options
   let h = ''; for (let r = 4; r <= 10; r++) h += `<option value="${r}">${(r * WL.row_h).toFixed(1)} m</option>`; $('wallRows').innerHTML = h; $('wallRows').value = WL.rows;
   const g = () => { const v = $('wallGlass').value; let o = '<option value="0">無</option>'; for (let r = 1; r < WL.rows; r++) o += `<option value="${r}">上 ${r} 排</option>`; $('wallGlass').innerHTML = o; $('wallGlass').value = Math.min(Number(v) || 0, WL.rows - 1); };
   g(); $('wallRows').addEventListener('change', () => { WL.rows = Number($('wallRows').value); RW = WL.rows * WL.row_h; g(); wallSettings(true); });
 }
 function wallSettings(rebuild) {
-  const length = wallMetres('wallLength'), repeat = wallMetres('wallRepeat'), fit = $('wallMapping').value === 'fit';
-  const W = fit ? length : repeat, mode = $('mode').value === '板塊' ? 1 : 0;
-  const bw = BOARDS.wall;
-  if (Math.abs(bw.wM - W) > 1e-6 || Math.abs(bw.hM - RW) > 1e-6) { bw.setSize(W, RW); bw.changed(); applyBoard(bw); }
-  if (rebuild) { setWallRanges(); buildWalls(); }
-  bw.tex.wrapS = fit ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping; bw.tex.needsUpdate = true;
+  const repeat = wallMetres('wallRepeat'), fit = $('wallMapping').value === 'fit', mode = $('mode').value === '板塊' ? 1 : 0;
+  for (const t of WALL_TESTS) {                          // each canvas = its own bay at true scale (or one repeat unit)
+    const bw = BOARDS['wall' + t.L], W = fit ? t.L : repeat;
+    if (Math.abs(bw.wM - W) > 1e-6 || Math.abs(bw.hM - RW) > 1e-6) { bw.setSize(W, RW); bw.changed(); applyBoard(bw); }
+    bw.tex.wrapS = fit ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping; bw.tex.needsUpdate = true;
+  }
+  if (rebuild) { setWallRanges(); buildWalls(); buildWallLabels(); }
   for (const { mat } of WMATS) { const U = mat.uniforms; U.uW.value = repeat; U.uFit.value = fit ? 1 : 0; U.uMode.value = mode; U.uTex.value = Number($('wallTex').value) || 0; U.uRowH.value = WL.row_h; }
   $('wallRepeat').disabled = fit;
-  $('wallWv').textContent = `牆段 ${length} m・${Math.ceil(length / WL.bay_m)} 格／排｜` + (fit ? '每段鋪滿一次' : `每 ${repeat} m 重複`) + '（改長度會等比例調整圖層位置與尺寸）';
-  document.querySelectorAll('[data-length]').forEach(el => el.classList.toggle('on', Number(el.dataset.length) === length));
+  $('wallWv').textContent = fit ? `每段牆鋪滿自己的畫布一次（100／250／700 m 各一張；其他路段的牆用 250 m 那張）` : `每 ${repeat} m 重複`;
   rebindWalls(); drawBoard(); updateStats();
 }
 function fenceSettings() {
@@ -912,8 +942,7 @@ for (const id of ['wallLength', 'wallRepeat']) {
   $(id).addEventListener('change', () => { $(id).value = wallMetres(id); wallSettings(id === 'wallLength'); });
 }
 $('wallMapping').addEventListener('change', () => wallSettings());
-$('wallPresets').addEventListener('click', e => { if (!e.target.dataset.length) return; $('wallLength').value = e.target.dataset.length; wallSettings(true); gotoMil(WALL_TEST_START - 30); });
-$('wallStart').onclick = () => gotoMil(WALL_TEST_START - 30); $('mode').addEventListener('change', () => wallSettings());
+$('wallStart').onclick = () => gotoMil(wallTestOf(wallMetres('wallLength')).a - 30); $('mode').addEventListener('change', () => wallSettings());
 for (const id of ['wallGlass', 'wallStep']) $(id).addEventListener('change', () => wallSettings(true));
 $('wallTex').addEventListener('change', () => wallSettings());
 $('fenceW').addEventListener('input', fenceSettings);
@@ -991,7 +1020,7 @@ $('bAdv').onclick = () => setActive('band'); $('bBack').onclick = () => setActiv
 
 // ---- board editor (one visible canvas, the active board) ----
 const cv = $('boardCv'), stage = $('stage');
-let active = BOARDS.wall, scale = 1, drag = null, showGuides = true;
+let active = BOARDS.wall250, scale = 1, drag = null, showGuides = true;
 const HINT = {
   board: '整段鋪圖：拖入或貼上會完整鋪滿；點選一格再貼上則只填該格。顯示全圖可查看兩端，縮放可放大編輯。拖曳移動、拖角落縮放、滾輪縮放、Delete 刪除。在模擬畫面點牆或圍籬，也會選到對應的格子。圖面左邊＝行車前方。',
   band: '拖入一張漸層圖：勾選的面依橋墩所在位置取色（左＝起點、右＝終點；藍底＝鋼構橋路段）。',
@@ -1108,7 +1137,10 @@ function updateButtons() {
   document.querySelectorAll('.tabs button').forEach(t => t.classList.toggle('on', t.dataset.tab === (active.key === 'band' ? 'bridge' : active.key)));
 }
 function setActive(key) {
-  active = key === 'bridge' ? BRTAB : BOARDS[key]; document.querySelectorAll('.pset').forEach(p => { p.hidden = !p.dataset.for.split(' ').includes(key); });
+  if (key === 'wall') key = 'wall' + wallTestOf(wallMetres('wallLength')).L;          // the last wall canvas used
+  const group = key.startsWith('wall') ? 'wall' : key;
+  if (group === 'wall') $('wallLength').value = BOARDS[key].key.slice(4);
+  active = key === 'bridge' ? BRTAB : BOARDS[key]; document.querySelectorAll('.pset').forEach(p => { p.hidden = !p.dataset.for.split(' ').includes(group); });
   $('bHint').textContent = HINT[key in HINT ? key : 'board'];
   drawBoard(); updateButtons();
 }
@@ -1177,8 +1209,9 @@ window.addEventListener('resize', drawBoard); new ResizeObserver(() => drawBoard
 
 // ================= scheme files: folder / files / drop on the 3D view, watched (Chrome / Edge) =================
 function slotOf(name) {
-  if (/(隔音牆|南下_車道側)\.png$/i.test(name)) return 'wall';
-  if (/施工圍籬\.png$/i.test(name)) return 'fence'; if (/方案設定\.xlsx$/i.test(name)) return 'xlsx'; return null;
+  const bay = /隔音牆[_\-\s]?(100|250|700)\.(png|jpe?g)$/i.exec(name); if (bay) return 'wall' + bay[1];   // one file per test bay
+  if (/(隔音牆|南下_車道側)\.(png|jpe?g)$/i.test(name)) return 'wall250';                                  // older single-file schemes: the 250 m canvas
+  if (/施工圍籬\.(png|jpe?g)$/i.test(name)) return 'fence'; if (/方案設定\.xlsx$/i.test(name)) return 'xlsx'; return null;
 }
 const stamp = () => new Date().toLocaleTimeString('zh-TW', { hour12: false });
 function setSlot(slot, state, tip) {                     // chip in the bar: ✓ loaded / ⚠ problem / — none; details on hover
@@ -1186,6 +1219,7 @@ function setSlot(slot, state, tip) {                     // chip in the bar: ✓
 }
 async function setFileImage(slot, src, label) {
   const img = await loadImg(src), b = BOARDS[slot];
+  if (slot === 'fence') { $('fenceW').value = Math.max(2, Math.round(b.hM * img.width / img.height * 10) / 10); fenceSettings(); }   // unit width follows the image: a longer JPG = a longer unit
   b.addImage(img, label, { fill: true, linked: 'file' }); applyBoard(b);
   const want = b.out.width / b.out.height, got = img.width / img.height, bad = Math.abs(got / want - 1) > 0.02;
   setSlot(slot, bad ? 'warn' : 'ok', label + '（' + img.width + '×' + img.height + ' px）' + (bad ? '\n長寬比 ' + got.toFixed(2) + '，畫布為 ' + want.toFixed(2) + '（已拉伸）' : ''));
@@ -1198,7 +1232,7 @@ async function loadXlsx(file) {
     const rows = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: null }) : [];
     const basic = {}; rows('基本').slice(1).forEach(r => { if (r[0]) basic[r[0]] = r[1]; });
     if (basic['單元寬度_m']) { $('wallRepeat').value = basic['單元寬度_m']; $('wallMapping').value = 'repeat'; }
-    if (basic['牆段長度_m']) $('wallLength').value = basic['牆段長度_m'];
+    if (basic['牆段長度_m']) $('wallLength').value = wallTestOf(Number(basic['牆段長度_m'])).L;   // picks which wall canvas opens
     if (basic['貼圖模式']) $('wallMapping').value = String(basic['貼圖模式']).trim() === '整段' ? 'fit' : 'repeat';
     if (basic['上色模式']) $('mode').value = String(basic['上色模式']).trim() === '自由' ? '自由' : '板塊';
     if (basic['施工圍籬單元寬度_m']) $('fenceW').value = basic['施工圍籬單元寬度_m'];
@@ -1231,7 +1265,7 @@ $('pickDir').onclick = async () => {
 };
 $('pickFiles').onclick = async () => {
   if (window.showOpenFilePicker) {
-    try { const hs = await window.showOpenFilePicker({ multiple: true, types: [{ description: '方案檔案', accept: { 'image/png': ['.png'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+    try { const hs = await window.showOpenFilePicker({ multiple: true, types: [{ description: '方案檔案', accept: { 'image/png': ['.png'], 'image/jpeg': ['.jpg', '.jpeg'],'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
       for (const h of hs) await watchHandle(h); live(); } catch (e) {}
   } else $('fileIn').click();
 };
@@ -1260,8 +1294,7 @@ const at = s => { const i = Math.max(0, Math.min(NP - 2, Math.floor(s))); return
 const pointAt = s => { const [i, t] = at(s); return PATH[i].clone().lerp(PATH[i + 1], t); };
 const milAt = s => { const [i, t] = at(s); return MIL[i] + (MIL[i + 1] - MIL[i]) * t; };
 let dist = 5, playing = false, free = null, look = 0, lookT = 0;   // look = temporary head turn (← →), degrees
-const gotoMil = m => { dist = Math.max(5, Math.min(NP - 31, m - DRIVE[0])); free = null; };
-const ORB = { az: -2.3, el: 0.42, r: 140 }, ELV = { fov: 4.2 };
+const gotoMil = m => { dist = Math.max(5, Math.min(NP - 31, m - DRIVE[0])); free = null; };const ORB = { az: -2.3, el: 0.42, r: 140 }, ELV = { fov: 4.2 };
 function pose(cam, s) {
   if (free) { cam.position.copy(free.eye); cam.lookAt(free.target); cam.updateMatrixWorld(); return; }
   const p = pointAt(s), q = pointAt(s + 25), f = q.clone().sub(p); f.y = 0; f.normalize();
@@ -1311,7 +1344,7 @@ function pickAt(e) {
     const b = BOARDS.fence, uc = -att('aAlong') / b.wM, x = (uc - Math.floor(uc)) * b.out.width;
     setActive('fence'); b.cell = fenceCell(b, x); drawBoard(); return;
   }
-  const key = 'wall', b = BOARDS[key], length = h.object.userData.length, fit = $('wallMapping').value === 'fit';
+  const key = h.object.userData.board || 'wall250', b = BOARDS[key], length = h.object.userData.length, fit = $('wallMapping').value === 'fit';
   const row = Math.min(WL.rows - 1, Math.floor(att('aH') / WL.row_h)), y = (WL.rows - 1 - row + 0.5) / WL.rows * b.out.height;
   let along = att('aAlong');
   if ($('mode').value === '板塊') { const start = Math.round(g.attributes.aBay.getX(ids[0])) * WL.bay_m; along = (start + Math.min(start + WL.bay_m, length)) / 2; }
@@ -1348,7 +1381,7 @@ renderer.toneMapping = THREE.LinearToneMapping;            // only the traffic p
 const postScene = new THREE.Scene(); postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post));
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 function resize() {
-  const w = pane.clientWidth, h = pane.clientHeight; renderer.setSize(w, h, false); $('nag').style.fontSize = Math.max(12, Math.round(Math.min(w * 0.042, w / 18))) + 'px';   // the whole line always fits
+  const w = pane.clientWidth, h = pane.clientHeight; renderer.setSize(w, h, false);
   const pr = renderer.getPixelRatio(); rt.setSize(Math.floor(w * pr), Math.floor(h * pr));
   camera.aspect = w / h; camera.updateProjectionMatrix(); camPrev.aspect = camera.aspect; camPrev.updateProjectionMatrix();
 }
@@ -1372,7 +1405,7 @@ function keyAct(code, down) {                             // this window's keys 
   if (!down) { delete keys[code]; return; }
   if (code === 'Space') togglePlay();
   if (code === 'ArrowUp' || code === 'ArrowDown') { const s = $('speed'); s.value = Number(s.value) + (code === 'ArrowUp' ? 5 : -5); s.oninput(); }
-  if (code === 'ArrowLeft' || code === 'ArrowRight') { if (!keys.ArrowLeft && !keys.ArrowRight) { holdT = performance.now(); nagged = false; } keys[code] = true; }
+  if (code === 'ArrowLeft' || code === 'ArrowRight') keys[code] = true;
 }
 window.addEventListener('keydown', e => {
   if (POPUP || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
@@ -1381,12 +1414,6 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { if (!POPUP) keyAct(e.code, false); });
 window.addEventListener('blur', () => { for (const k in keys) delete keys[k]; });
-// 惡趣味 (使用者 10/27): holding ← / → for 5 s in the driver view flashes a warning twice, once per hold
-let holdT = 0, nagged = false;
-function nag(now) {
-  if (nagged || !(keys.ArrowLeft || keys.ArrowRight) || $('cam').value !== 'drive' || now - holdT < 5000) return;
-  nagged = true; const n = $('nag'); n.classList.remove('show'); void n.offsetWidth; n.classList.add('show');
-}
 $('speed').oninput = () => { $('speedV').textContent = $('speed').value + ' km/h'; };
 $('blur').onchange = () => { post.uniforms.uBlur.value = $('blur').checked ? 1 : 0; };
 const fmtMil = m => { const k = Math.floor(m / 1000); return k + 'K+' + String(Math.round(m - k * 1000)).padStart(3, '0'); };
@@ -1421,6 +1448,8 @@ function partAt(m) {                                       // which part of the 
     return m < T.p1 ? '・洞口前' : m > T.p2 ? '・洞口後' : '・露天段'; }
   if (g.type === 'bridge') { const L = BRG.find(B => B.s0 === g.s0).line; return m < Math.min(L[1].mA0, L[-1].mA0) || m > Math.max(L[1].mA1, L[-1].mA1) ? '・引道' : ''; }
   if (g.type === 'trees' && m < g.s0 + 70) return '・跨越橋';
+  const t = g === SEG[0] && WALL_TESTS.find(t => m >= t.a - 40 && m < t.b);
+  if (t) return '・' + t.L + ' m 測試牆';
   return '';
 }
 function updateStats() { drawBoard(); }
@@ -1435,12 +1464,12 @@ const statsOf = key => {                                   // whole-route totals
 $('wallLength').value = 250; $('wallMapping').value = 'fit'; $('wallRepeat').value = D.demo.W; $('mode').value = '自由'; $('fenceW').value = D.demo.fenceW;
 setBridge(D.demo.bridge, '示範：' + D.demo.name); wallSettings(true); fenceSettings(); applyShape(); setCamMode(); setActive('wall'); gotoMil(WALL_TEST_START - 30);
 if (!POPUP) (async () => {                                // the 另開視窗 gets the canvases from the main window instead
-  for (const [slot, key] of [['wall', 'SB'], ['fence', 'fence']]) if (D.demo.img[key]) await setFileImage(slot, D.demo.img[key], '示範：' + D.demo.name);
+  for (const [slot, key] of [...WALL_KEYS.map(k => [k, 'SB']), ['fence', 'fence']]) if (D.demo.img[key]) await setFileImage(slot, D.demo.img[key], '示範：' + D.demo.name);
   rebindWalls(); drawBoard();
 })();
 
 if (QS.has('debug')) window.__dbg = {
-  goto(m) { gotoMil(m); }, free(e, t) { free = { eye: new THREE.Vector3(...e), target: new THREE.Vector3(...t) }; },
+  goto(m) { gotoMil(m); }, layout() { return { WALLS, FENCE, WALL_TESTS, SEG }; }, walls() { return WALL_OBJ.filter(o => o.name.startsWith('wall_')).map(o => ({ start: o.userData.start, end: o.userData.end, sg: o.userData.sg, board: o.userData.board, texOk: o.material.uniforms.tDesign.value === BOARDS[o.userData.board].tex })); }, free(e, t) { free = { eye: new THREE.Vector3(...e), target: new THREE.Vector3(...t) }; },
   freeRel(m, off, h, look2) { gotoMil(m); const p = pointAt(dist), q = pointAt(dist + 25), f = q.clone().sub(p).setY(0).normalize(), r = new THREE.Vector3().crossVectors(f, UP);
     const eye = p.clone().addScaledVector(r, off[0]).addScaledVector(f, off[1]).addScaledVector(UP, h); const tg = p.clone().addScaledVector(r, look2[0]).addScaledVector(f, look2[1]).addScaledVector(UP, look2[2]);
     free = { eye, target: tg }; },
@@ -1579,7 +1608,7 @@ const vp = new THREE.Matrix4(); let last = performance.now(), fpsAcc = 0, fpsN =
 function frame(now) {
   const gap = now - last, dt = Math.min(0.1, gap / 1000); last = now;
   for (const b of pending) applyBoard(b); pending.clear();
-  if (!POPUP) { lookT = keys.ArrowLeft ? -70 : keys.ArrowRight ? 70 : 0; look += (lookT - look) * Math.min(1, dt * 5); nag(now); }   // the 另開視窗 gets look from the main window
+  if (!POPUP) { lookT = keys.ArrowLeft ? -70 : keys.ArrowRight ? 70 : 0; look += (lookT - look) * Math.min(1, dt * 5); }   // the 另開視窗 gets look from the main window
   const v = playing && !free ? Number($('speed').value) / 3.6 : 0;
   dist += v * dt; if (dist > NP - 30) dist = 5;
   if (POPUP) followMain(now, v, dt); else if (gap > 400) adoptPopup(now);

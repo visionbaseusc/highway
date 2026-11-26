@@ -17,7 +17,7 @@ function setup(length, maxTextureSize = 8192) {
     WALLS:{1:[[80,80+length]],'-1':[[80,80+length]]}, Y_WALL:30.5,
     Geo:class{mesh(){return {geometry:new Geometry()};}}, fr:m=>({rx:1,rz:0,p:0,h:0}), P:(f,y,h)=>[y,h,0], gnd:()=>0,
     mtx:v=>v, sweep(){}, range:()=>[], inst:()=>({geometry:new Geometry()}), lam:()=>({}), MATS:{concrete:{}},
-    renderer:{capabilities:{maxTextureSize}},PXM:50,meshes,
+    renderer:{capabilities:{maxTextureSize}},PXM:50,meshes,wallBoardOf:()=>'wall250',
   });
   vm.runInContext(source+'; buildWalls();',context);
   return {context,meshes};
@@ -67,6 +67,21 @@ for (const length of [100,250,700]) test(`${length} m: whole-wall paste and drop
   vm.runInContext(`board.addImage({width:1000,height:300},'cell',{cell:{x:12,y:4,w:24,h:10}})`,context);
   const cell=JSON.parse(vm.runInContext('JSON.stringify(board.layers[1])',context));
   assert.deepEqual([cell.x,cell.y,cell.w,cell.h],[12,4,24,10]);
+});
+test('three separate test bays (100 / 250 / 700 m) all fit on the opening straight, well clear of the tunnel approach',()=>{
+  const context=vm.createContext({});
+  vm.runInContext(section('const WALL_TEST_GAP', 'const SCENARIO_WALLS')+'; var out={WALL_TESTS, WALL_TEST_START, pick:[100,250,700,123].map(L=>wallTestOf(L).L), boards:WALL_TESTS.map(t=>wallBoardOf(t.a,t.b)).concat([wallBoardOf(2700,2820), wallBoardOf(80,330)])};',context);
+  const {WALL_TESTS,WALL_TEST_START,pick,boards}=JSON.parse(vm.runInContext('JSON.stringify(out)',context));
+  // each bay has its own design canvas; every other wall (and anything not exactly a bay) uses the 250 m one
+  assert.deepEqual(boards,['wall100','wall250','wall700','wall250','wall250']);
+  assert.deepEqual(WALL_TESTS.map(t=>t.L),[100,250,700]);
+  for(const t of WALL_TESTS) assert.equal(t.b-t.a,t.L);
+  for(let i=1;i<3;i++) assert.ok(WALL_TESTS[i].a-WALL_TESTS[i-1].b>=150,'bays are clearly separated');
+  assert.equal(WALL_TEST_START,WALL_TESTS[0].a);
+  assert.deepEqual(pick,[100,250,700,100]);
+  const straight=Number(/\['straight', (\d+), 0, '直立式隔音牆測試'/.exec(html)[1]);
+  // the first tunnel's approach wall starts 140 m before it; keep 100 m more of open road after the last bay
+  assert.ok(WALL_TESTS[2].b<=straight-140-100,`last bay ends at ${WALL_TESTS[2].b}, straight is ${straight} m`);
 });
 test('overview fits the whole canvas at each preset and zoom can enlarge it',()=>{
   const context=vm.createContext({active:{out:{width:8192,height:98}},stage:{clientWidth:1246,clientHeight:120},$:()=>({value:0})});
