@@ -122,7 +122,8 @@ body.popup #simPane > :not(canvas):not(#popHint) { display: none; }
     <span class="status" id="bSize"></span>
   </div>
   <div class="toolbar">
-    <div class="pset" data-for="fence"><label>單元寬度</label><input type="number" id="fenceW" min="2" step="0.1" value="20" title="載入施工圍籬圖時會依圖片長寬比自動設定（高 2.4 m）"> m</div>
+    <div class="pset" data-for="fence"><label>單元寬度</label><input type="number" id="fenceW" min="2" step="0.1" value="20" title="載入施工圍籬圖時會依圖片長寬比自動設定（高 2.4 m）"> m
+      <button id="fenceNext" title="開到下一段南下（右側）施工圍籬；位置條上的黃線＝施工圍籬（下緣南下、上緣北上）">前往下一段圍籬</button></div>
     <div class="pset" data-for="wall">
       <input type="hidden" id="wallLength" value="250">
       <button id="wallStart" title="開到目前這張畫布對應的測試牆">前往這段牆</button>
@@ -843,6 +844,9 @@ class Board {
     // The fence keeps its pixels per metre, so a new unit width only adds or crops canvas; images are never stretched.
     const sx = this.keepScale ? 1 : this.out.width / oldW, sy = this.keepScale ? 1 : this.out.height / oldH;
     for (const L of this.layers) { L.x *= sx; L.w *= sx; L.y *= sy; L.h *= sy; }
+    // three.js allocates GPU texture storage once at its first size; a resized canvas would only update that corner
+    // (the rest stays black / stale). Dispose so the next upload re-allocates at the new size (same object, uniforms stay bound).
+    if (this.tex && (this.out.width !== oldW || this.out.height !== oldH)) this.tex.dispose();
     this.dirty = true; this.cell = null;
   }
   render() {
@@ -942,7 +946,11 @@ for (const id of ['wallLength', 'wallRepeat']) {
   $(id).addEventListener('change', () => { $(id).value = wallMetres(id); wallSettings(id === 'wallLength'); });
 }
 $('wallMapping').addEventListener('change', () => wallSettings());
-$('wallStart').onclick = () => gotoMil(wallTestOf(wallMetres('wallLength')).a - 30); $('mode').addEventListener('change', () => wallSettings());
+$('wallStart').onclick = () => gotoMil(wallTestOf(wallMetres('wallLength')).a - 30);
+$('fenceNext').onclick = () => {                         // next 南下 fence ahead of the car (wraps to the first)
+  const here = milAt(dist), starts = FENCE[1].map(([a]) => a).sort((p, q) => p - q);
+  gotoMil((starts.find(a => a - 30 > here + 5) ?? starts[0]) - 30);
+}; $('mode').addEventListener('change', () => wallSettings());
 for (const id of ['wallGlass', 'wallStep']) $(id).addEventListener('change', () => wallSettings(true));
 $('wallTex').addEventListener('change', () => wallSettings());
 $('fenceW').addEventListener('input', fenceSettings);
@@ -1420,6 +1428,7 @@ const fmtMil = m => { const k = Math.floor(m / 1000); return k + 'K+' + String(M
 
 // ---- route strip (the 位置 bar): one block per section, click / drag to jump ----
 const rcv = $('route');
+const FENCE_MARK = '#ffd23f';
 const RC = { tunnel: ['#6b4a2b', '#f1dcc0'], bridge: ['#2f5f99', '#dbe9fb'], trees: ['#8a7320', '#fbefc4'], straight: ['#384044', '#9aa5ab'], curve: ['#465055', '#c3ccd1'] };
 function drawRoute(mil) {
   const w = rcv.clientWidth, h = rcv.clientHeight; if (!w) return; const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -1435,6 +1444,8 @@ function drawRoute(mil) {
   }
   for (const g of SEG) { const x0 = X(g.s0), x1 = X(g.s1), lab = g.tag;
     if (lab && c.measureText(lab).width < x1 - x0 - 4) { c.fillStyle = RC[g.type][1]; c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 3; c.strokeText(lab, (x0 + x1) / 2, bh / 2 + 1); c.fillText(lab, (x0 + x1) / 2, bh / 2 + 1); } }
+  // construction fences: 南下 (right of the driver) along the bottom edge, 北上 along the top edge
+  c.fillStyle = FENCE_MARK; for (const [sg, y] of [[1, bh - 4], [-1, 0]]) for (const [a, b] of FENCE[sg]) c.fillRect(X(a), y, Math.max(2, X(b) - X(a)), 4);
   c.fillStyle = '#6d777c'; for (let k = 0; k * 1000 <= DRIVE[1]; k++) c.fillRect(Math.min(w - 1, X(k * 1000)), bh + 1, 1, 3);
   const x = X(mil); c.fillStyle = '#ff7a2a'; c.fillRect(x - 1, 0, 2, bh); c.beginPath(); c.moveTo(x - 5, h); c.lineTo(x + 5, h); c.lineTo(x, bh); c.fill();
 }
@@ -1468,7 +1479,9 @@ if (!POPUP) (async () => {                                // the 另開視窗 ge
   rebindWalls(); drawBoard();
 })();
 
+let dbgGrab = null;                                        // ?debug: copy of the next rendered frame (tests read 3D pixels)
 if (QS.has('debug')) window.__dbg = {
+  grab() { return new Promise(r => { dbgGrab = r; step(performance.now()); }); },   // renders now: works while the tab is in the background
   goto(m) { gotoMil(m); }, layout() { return { WALLS, FENCE, WALL_TESTS, SEG }; }, walls() { return WALL_OBJ.filter(o => o.name.startsWith('wall_')).map(o => ({ start: o.userData.start, end: o.userData.end, sg: o.userData.sg, board: o.userData.board, texOk: o.material.uniforms.tDesign.value === BOARDS[o.userData.board].tex })); }, free(e, t) { free = { eye: new THREE.Vector3(...e), target: new THREE.Vector3(...t) }; },
   freeRel(m, off, h, look2) { gotoMil(m); const p = pointAt(dist), q = pointAt(dist + 25), f = q.clone().sub(p).setY(0).normalize(), r = new THREE.Vector3().crossVectors(f, UP);
     const eye = p.clone().addScaledVector(r, off[0]).addScaledVector(f, off[1]).addScaledVector(UP, h); const tg = p.clone().addScaledVector(r, look2[0]).addScaledVector(f, look2[1]).addScaledVector(UP, look2[2]);
@@ -1605,7 +1618,8 @@ if (POPUP) {
 }
 
 const vp = new THREE.Matrix4(); let last = performance.now(), fpsAcc = 0, fpsN = 0, tick = 0;
-function frame(now) {
+function frame(now) { step(now); requestAnimationFrame(frame); }
+function step(now) {
   const gap = now - last, dt = Math.min(0.1, gap / 1000); last = now;
   for (const b of pending) applyBoard(b); pending.clear();
   if (!POPUP) { lookT = keys.ArrowLeft ? -70 : keys.ArrowRight ? 70 : 0; look += (lookT - look) * Math.min(1, dt * 5); }   // the 另開視窗 gets look from the main window
@@ -1624,12 +1638,12 @@ function frame(now) {
   updateTraffic(mil, v, playing && !free ? dt : 0);
   renderer.setRenderTarget(rt); renderer.render(scene, camera); renderer.setRenderTarget(null); renderer.render(postScene, postCam);
   renderer.toneMappingExposure = post.uniforms.uExp.value; renderer.autoClear = false; renderer.render(traffic, camera); renderer.autoClear = true;
+  if (dbgGrab) { const c = document.createElement('canvas'); c.width = renderer.domElement.width; c.height = renderer.domElement.height; c.getContext('2d').drawImage(renderer.domElement, 0, 0); dbgGrab(c); dbgGrab = null; }
   if (shotReq) { shotReq = false; renderer.domElement.toBlob(b => { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = '模擬截圖_' + fmtMil(mil).replace('+', '') + '.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }); }
-  $('hud').textContent = '里程 ' + fmtMil(mil) + '　' + segAt(mil).name + partAt(mil) + '　' + Math.round(v * 3.6) + ' km/h';
+  $('hud').textContent = '里程 ' + fmtMil(mil) + '　' + segAt(mil).name + partAt(mil) + (fenceAt(1, mil) ? '・施工圍籬' : '') + '　' + Math.round(v * 3.6) + ' km/h';
   if (++tick % 6 === 0) { drawRoute(mil); $('posV').textContent = fmtMil(mil); }
   fpsAcc += dt; fpsN++; if (fpsAcc > 1) { $('fps').textContent = Math.round(fpsN / fpsAcc) + ' fps'; fpsAcc = 0; fpsN = 0; }
   linkFrame(now);
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 </script>

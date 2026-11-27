@@ -26,7 +26,7 @@ function setup() {
     PXM, Math, Number, Promise,
     $: id => els[id] || (els[id] = {value: ''}),
     document: {createElement: () => ({width: 0, height: 0, getContext: () => ({})})},
-    THREE: {CanvasTexture: class {constructor(i) {this.image = i;}}, SRGBColorSpace: 'srgb', RepeatWrapping: 1},
+    THREE: {CanvasTexture: class {constructor(i) {this.image = i; this.disposed = 0;} dispose() {this.disposed++;}}, SRGBColorSpace: 'srgb', RepeatWrapping: 1},
     renderer: {capabilities: {maxTextureSize: 16384, getMaxAnisotropy: () => 16}},
     fenceMat: {uniforms: {uFW: {value: 20}}},
     scheduleApply() {}, drawBoard() {}, updateButtons() {}, applyBoard() {},
@@ -172,6 +172,17 @@ test('existing layers keep their position and size when a drop extends the unit'
   t.fence.addImage({width: 8000, height: 240}, 'b', {x: 0});
   assert.equal(t.fence.wM, 80);
   assert.deepEqual([a.x, a.y, a.w, a.h], snap);
+});
+
+test('a canvas size change frees the GPU texture so it is re-allocated (else 3D shows black / stale, also in 另開視窗)', async () => {
+  const t = setup();
+  const tex = t.fence.tex, n0 = tex.disposed;
+  t.setWidth(20); assert.equal(tex.disposed, n0, 'same size: keep the texture');
+  t.setWidth(60); assert.equal(tex.disposed, n0 + 1);
+  await t.api.setFileImage('fence', {width: 4000, height: 240}, 'x.jpg'); assert.equal(tex.disposed, n0 + 2);
+  assert.equal(t.fence.tex, tex, 'same texture object, so the material uniform stays bound');
+  const wall = t.api.BOARDS.wall, wn = wall.tex.disposed;
+  wall.setSize(40, 3); assert.equal(wall.tex.disposed, wn + 1);
 });
 
 test('the noise-wall canvas still scales its layers with the wall length (unchanged)', () => {
