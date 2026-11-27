@@ -1473,9 +1473,11 @@ const statsOf = key => {                                   // whole-route totals
 
 // demo scheme
 $('wallLength').value = 250; $('wallMapping').value = 'fit'; $('wallRepeat').value = D.demo.W; $('mode').value = '自由'; $('fenceW').value = D.demo.fenceW;
-setBridge(D.demo.bridge, '示範：' + D.demo.name); wallSettings(true); fenceSettings(); applyShape(); setCamMode(); setActive('wall'); gotoMil(WALL_TEST_START - 30);
+setBridge(D.demo.bridge, '示範：' + D.demo.name); wallSettings(true); fenceSettings();
+for (const k of [...WALL_KEYS, 'fence']) applyBoard(BOARDS[k]);   // paint the background once: an empty canvas that was never drawn shows black in 3D applyShape(); setCamMode(); setActive('wall'); gotoMil(WALL_TEST_START - 30);
 if (!POPUP) (async () => {                                // the 另開視窗 gets the canvases from the main window instead
-  for (const [slot, key] of [...WALL_KEYS.map(k => [k, 'SB']), ['fence', 'fence']]) if (D.demo.img[key]) await setFileImage(slot, D.demo.img[key], '示範：' + D.demo.name);
+  // the three wall canvases start empty: one demo image cannot match all three proportions (it showed ⚠ before anything was loaded)
+  if (D.demo.img.fence) await setFileImage('fence', D.demo.img.fence, '示範：' + D.demo.name);
   rebindWalls(); drawBoard();
 })();
 
